@@ -28,7 +28,7 @@ Use your normal `quarto render` workflow. No Node, Python, model or separate aut
 
 For a local checkout or extracted source download, use `quarto add "C:/path/to/accessible-maths" --no-prompt` and select the unqualified `accessible-maths` filter. Local-copy update/removal uses that same local source path/unqualified name. Keep the GitHub owner prefix when selecting a GitHub-installed filter.
 
-The source folder includes a complete [example article](example.qmd). From that folder, run `quarto render example.qmd --to html` or `quarto render example.qmd --to docx`. The experimental HTML example uses the external pinned engine described below; DOCX uses the ordinary static fallback.
+The source folder includes a complete [example article](example.qmd). From that folder, run `quarto render example.qmd --to html` or `quarto render example.qmd --to docx`. If copying the article into a GitHub-installed consumer project, change its filter to `kai-prince-sfhea/accessible-maths`. The experimental HTML example uses the external pinned engine described below; DOCX uses the ordinary static fallback.
 
 ## Associate an authored proof or explanation
 
@@ -122,7 +122,7 @@ Use `semantics: author-annotated` only when you want to declare the meaning of a
 
 ```yaml
 filters:
-  - accessible-maths
+  - kai-prince-sfhea/accessible-maths
 accessible-maths:
   semantics: author-annotated
 format:
