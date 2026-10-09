@@ -1,0 +1,47 @@
+.quarto/
+_site/
+_book/
+*_files/
+*.html
+*.docx
+*.pdf
+*.log
+# Generated outputs of the runnable example; authored TeX/Typst is not ignored globally.
+/example.epub
+/example.tex
+/example.typ
+/example.aux
+/example.bbl
+/example.blg
+/example.out
+/example.toc
+# Keep developer material in the sibling accessible-maths-development workspace.
+/docs/
+/tests/
+/scripts/
+/tools/
+/ci/
+/AGENTS.md
+/CONTRIBUTING.md
+/package.json
+/package-lock.json
+/deno.lock
+.test-artifacts/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+*.pending
+.vscode/
+.idea/
+*.code-workspace
+# Local credentials and private keys must not enter a public source repository.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+.DS_Store
+Thumbs.db

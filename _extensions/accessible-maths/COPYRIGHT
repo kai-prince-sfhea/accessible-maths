@@ -1,0 +1,10 @@
+Copyright 2026 Kai Prince
+
+Original Accessible Maths extension code, documentation and examples are
+licensed under Apache License 2.0. OpenAI Codex assisted their development;
+see the source README for the development disclosure and acceptance limits.
+
+MathJax 4.1.3 and its supporting components, fonts and speech-rule engine are
+optional separately supplied upstream dependencies, not bundled source here.
+Their respective licences and notices apply separately. Consumer documents,
+research and data retain their independently chosen rights.

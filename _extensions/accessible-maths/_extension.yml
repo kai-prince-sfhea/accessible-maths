@@ -1,0 +1,8 @@
+title: Accessible Maths
+author: Kai Prince
+version: 0.0.4
+quarto-required: '>=1.11.5'
+contributes:
+  filters:
+    - at: pre-ast
+      path: accessible-maths.lua

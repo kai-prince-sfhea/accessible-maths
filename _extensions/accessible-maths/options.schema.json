@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:accessible-maths:options:1",
+  "title": "Accessible Maths options, schema 1",
+  "description": "The value of the accessible-maths metadata namespace. Reference schema; not automatically registered with Quarto. Lua additionally validates normalized nonblank labels and UTF-8 byte limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "enabled": { "type": "boolean", "default": true },
+    "theorem-controls": { "type": "boolean", "default": true },
+    "semantics": { "type": "string", "enum": ["off", "author-annotated"], "default": "off" },
+    "mathml-output": { "type": "string", "enum": ["internal", "assistive"], "default": "internal" },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "proof": { "$ref": "#/$defs/label", "default": "Proof" },
+        "hint": { "$ref": "#/$defs/label", "default": "Hint" },
+        "assumptions": { "$ref": "#/$defs/label", "default": "Assumptions" },
+        "related": { "$ref": "#/$defs/label", "default": "Explore this statement" },
+        "back": { "$ref": "#/$defs/label", "default": "Back to statement" },
+        "level": { "$ref": "#/$defs/label", "default": "Explanation level" },
+        "all": { "$ref": "#/$defs/label", "default": "All explanations" }
+      }
+    }
+  },
+  "allOf": [{
+    "if": { "properties": { "mathml-output": { "const": "assistive" }, "enabled": { "const": true } }, "required": ["mathml-output"] },
+    "then": { "properties": { "semantics": { "const": "author-annotated" } }, "required": ["semantics"] }
+  }],
+  "$defs": { "label": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Lua normalizes Unicode whitespace and requires visible nonblank text of at most 256 UTF-8 bytes." } }
+}
