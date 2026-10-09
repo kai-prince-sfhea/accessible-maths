@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.4 — local experimental candidate, 9 October 2026
+## 0.0.4 — experimental public source, 9 October 2026
 
 - Fixed print visibility for extension content inside closed authored native disclosures, without changing screen disclosure or level-selection state.
 - Required original authored annotation preservation for a successful assistive MathML DOM verdict; a DOM matching a changed final internal tree no longer passes.
@@ -9,7 +9,7 @@
 
 No additional setup or authoring changes are required. Manual acceptance, intent-aware speech and accessibility conformance remain separate questions.
 
-Public-source preparation makes material AI assistance and review limits explicit, adds maintainer/upstream terms links, documents serial verification and protects generated, credential and developer files from accidental addition. Runtime behavior is unchanged; publication and the actual remote installation route remain separate steps.
+Public-source preparation makes material AI assistance and review limits explicit, adds maintainer/upstream terms links, documents serial verification and protects generated, credential and developer files from accidental addition. The reviewed source is now public on GitHub. Actual GitHub installation, owner-qualified activation, changed-byte update, disabling, removal and native HTML/DOCX rendering passed on the stated baseline. Publication documentation changes leave all nine tested runtime files unchanged. This is source publication; no tagged release or broader capability acceptance is claimed.
 
 ## 0.0.3 — local experimental candidate, 9 October 2026
 

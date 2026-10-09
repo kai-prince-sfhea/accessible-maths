@@ -2,29 +2,31 @@
 
 An experimental Quarto extension for native mathematical writing with authored proofs, hints, assumptions and explanation levels. It also starts a small, explicit TeX-to-MathML annotation experiment. It preserves the original mathematical content; annotations do not establish mathematical correctness or accessible speech.
 
-**Version 0.0.4 is an experimental source candidate prepared for a public repository. It has not been pushed or released yet.** The primary target is ordinary HTML articles and websites on Windows with Quarto 1.11.5 pre-release. This is the tested development baseline, not an established stable-version minimum. Manual assistive-technology, mathematical meaning and author acceptance remain separate checks.
+**Version 0.0.4 is published as experimental source. There is no tagged release yet.** The primary target is ordinary HTML articles and websites on Windows with Quarto 1.11.5 pre-release. This is the tested development baseline, not an established stable-version minimum. Manual assistive-technology, mathematical meaning and author acceptance remain separate checks.
 
 Development used material OpenAI Codex assistance. Read [AI assistance and human responsibility](#ai-assistance-and-human-responsibility) for its scope, evaluation limits and the maintainer's responsibilities.
 
 ## Install and activate
 
-From your existing Quarto project or document directory, add the local source folder:
+From your existing Quarto project or document directory, install from GitHub:
 
 ```sh
-quarto add "C:/path/to/accessible-maths" --no-prompt
+quarto add kai-prince-sfhea/accessible-maths --no-prompt
 quarto list extensions
 ```
 
-These instructions use an existing local checkout or extracted source download. After a public repository is created, its actual GitHub installation/update route and extension namespace must be verified before they are advertised here.
+GitHub installation uses `_extensions/kai-prince-sfhea/accessible-maths/`. The actual GitHub add/list/update/disable/remove workflow and standalone HTML/DOCX example were verified on the baseline above.
 
 Select the filter in your document front matter or `_quarto.yml`:
 
 ```yaml
 filters:
-  - accessible-maths
+  - kai-prince-sfhea/accessible-maths
 ```
 
 Use your normal `quarto render` workflow. No Node, Python, model or separate author build command is needed. Installing the extension does not select its filter or replace your project type, theme or navigation. Quarto installs only the `_extensions` runtime; retain that directory with your project's source. See [Quarto extension management](https://quarto.org/docs/extensions/managing.html).
+
+For a local checkout or extracted source download, use `quarto add "C:/path/to/accessible-maths" --no-prompt` and select the unqualified `accessible-maths` filter. Local-copy update/removal uses that same local source path/unqualified name. Keep the GitHub owner prefix when selecting a GitHub-installed filter.
 
 The source folder includes a complete [example article](example.qmd). From that folder, run `quarto render example.qmd --to html` or `quarto render example.qmd --to docx`. The experimental HTML example uses the external pinned engine described below; DOCX uses the ordinary static fallback.
 
@@ -190,18 +192,18 @@ These checks use synthetic fixtures and do not establish every option combinatio
 
 ## Disable, update and remove
 
-Set `accessible-maths.enabled: false` to disable the selected filter, or remove `accessible-maths` from `filters`. No extension cache, reader database or review history needs resetting.
+Set `accessible-maths.enabled: false` to disable the selected filter, or remove `kai-prince-sfhea/accessible-maths` from `filters`. No extension cache, reader database or review history needs resetting.
 
-To update a local installation, back up your source and run this from the consuming project:
+To update a GitHub installation, back up your source and installed extension, review the [changelog](CHANGELOG.md), then run this from the consuming project:
 
 ```sh
-quarto update extension "C:/path/to/accessible-maths" --no-prompt
+quarto update extension kai-prince-sfhea/accessible-maths --no-prompt
 ```
 
 To uninstall, first remove the filter from your configuration, then run:
 
 ```sh
-quarto remove accessible-maths --no-prompt
+quarto remove kai-prince-sfhea/accessible-maths --no-prompt
 ```
 
 Review your authored attributes and macros before removing their adapter; ordinary native theorem/proof content remains useful, while extension-defined macro invocations need an ordinary TeX replacement. Version 0.0.x authoring conventions may change; retain a working installed copy and review the [changelog](CHANGELOG.md) before updating. No automatic migration is promised.
@@ -210,7 +212,7 @@ Review your authored attributes and macros before removing their adapter; ordina
 
 The browser enhancement uses no AI, server, reader storage, model download or publication action. The optional annotation experiment loads the explicitly selected MathJax 4.1.3 component from jsDelivr; MathJax may request its supporting components, fonts, speech worker and speech-rule maps. [MathJax 4.1.3](https://github.com/mathjax/MathJax/blob/4.1.3/LICENSE) and its [speech-rule engine](https://github.com/Speech-Rule-Engine/speech-rule-engine/blob/master/LICENSE) are separately supplied dependencies, with their own terms; supporting fonts and other assets retain their respective terms. No upstream engine, font, speech worker or model is bundled here. Offline operation, PWA caching and compatibility with a particular host's Content Security Policy are unverified. Review your site's final resources and policy before publishing.
 
-This extension is not a source sanitizer or a website security audit. Keep confidential content out of documents intended for publication, including collapsed proofs: collapse does not make source private. The maintainer is [Kai Prince](https://github.com/kai-prince-sfhea). No private vulnerability-reporting channel is configured yet. Use contact information the maintainer makes available on that profile to arrange a private route before sharing sensitive details; do not post those details in public issues. Ordinary questions and non-sensitive bug reports can use repository issues once a public repository exists and issues are enabled. Include the extension, Quarto, operating system and browser versions plus a small non-confidential reproduction.
+This extension is not a source sanitizer or a website security audit. Keep confidential content out of documents intended for publication, including collapsed proofs: collapse does not make source private. The maintainer is [Kai Prince](https://github.com/kai-prince-sfhea). No private vulnerability-reporting channel is configured yet. Use contact information the maintainer makes available on that profile to arrange a private route before sharing sensitive details; do not post those details in public issues. Ordinary questions and non-sensitive bug reports can use [repository issues](https://github.com/kai-prince-sfhea/accessible-maths/issues). Include the extension, Quarto, operating system and browser versions plus a small non-confidential reproduction.
 
 Copyright 2026 Kai Prince. Extension code, original examples and documentation use [Apache License 2.0](LICENSE); the [installed licence](_extensions/accessible-maths/LICENSE) travels with the runtime. Retain applicable copyright and licence notices when redistributing browser assets. This does not choose rights for your research, prose or mathematical data.
 
