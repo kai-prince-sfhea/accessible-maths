@@ -2,7 +2,7 @@
 
 An experimental Quarto extension for native mathematical writing with authored proofs, hints, assumptions and explanation levels. It also starts a small, explicit TeX-to-MathML annotation experiment. It preserves the original mathematical content; annotations do not establish mathematical correctness or accessible speech.
 
-**Version 0.0.4 is published as experimental source. There is no tagged release yet.** The primary target is ordinary HTML articles and websites on Windows with Quarto 1.11.5 pre-release. This is the tested development baseline, not an established stable-version minimum. Manual assistive-technology, mathematical meaning and author acceptance remain separate checks.
+**Version 0.0.5 is experimental source. There is no tagged release yet.** The primary target is ordinary HTML articles and websites on Windows with Quarto 1.11.5 pre-release. This is the tested development baseline, not an established stable-version minimum. Manual assistive-technology, mathematical meaning and author acceptance remain separate checks.
 
 Development used material OpenAI Codex assistance. Read [AI assistance and human responsibility](#ai-assistance-and-human-responsibility) for its scope, evaluation limits and the maintainer's responsibilities.
 
@@ -101,6 +101,15 @@ accessible-maths:
 | `labels` | English strings below | Override generated interface text; authored summaries and level names remain your own text. |
 
 Boolean options require booleans. Unknown options are rejected. The versioned [options schema](_extensions/accessible-maths/options.schema.json) describes this namespace; Lua also checks normalized labels and UTF-8 byte limits. It is a reference schema, not automatic Quarto editor integration. Use Quarto's normal metadata layering to select document or project settings. Control-label translation is explicit; selecting a document language does not automatically translate these strings:
+
+The filter consumes Quarto's effective `accessible-maths` mapping. A higher
+metadata layer can replace that mapping; do not assume a partial document,
+format, profile or metadata-file value preserves every project option. Put a
+complete intended mapping at the authoritative layer. In particular, an
+explicit document mapping can remain authoritative over `--metadata-file`.
+To disable, set `enabled: false` in the effective mapping or remove the filter.
+Unknown keys and malformed options are still diagnosed before disabled
+processing returns; disabling is not a way to admit invalid configuration.
 
 ```yaml
 accessible-maths:
@@ -215,6 +224,13 @@ The browser enhancement uses no AI, server, reader storage, model download or pu
 This extension is not a source sanitizer or a website security audit. Keep confidential content out of documents intended for publication, including collapsed proofs: collapse does not make source private. The maintainer is [Kai Prince](https://github.com/kai-prince-sfhea). No private vulnerability-reporting channel is configured yet. Use contact information the maintainer makes available on that profile to arrange a private route before sharing sensitive details; do not post those details in public issues. Ordinary questions and non-sensitive bug reports can use [repository issues](https://github.com/kai-prince-sfhea/accessible-maths/issues). Include the extension, Quarto, operating system and browser versions plus a small non-confidential reproduction.
 
 Copyright 2026 Kai Prince. Extension code, original examples and documentation use [Apache License 2.0](LICENSE); the [installed licence](_extensions/accessible-maths/LICENSE) travels with the runtime. Retain applicable copyright and licence notices when redistributing browser assets. This does not choose rights for your research, prose or mathematical data.
+
+Extension validation messages use documented field names and, for associated
+elements, safe processing ordinals instead of echoing authored IDs, semantic
+URIs, option keys or target values. An ordinal describes filter traversal, not
+a source line number. Ordinary rendered prose, attributes, Quarto errors and
+native tool logs can still contain authored or machine-specific information;
+review them privately before sharing. This does not make page content private.
 
 ## AI assistance and human responsibility
 

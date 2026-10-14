@@ -4,6 +4,13 @@ local function fail(message)
   assert(false, 'accessible-maths: ' .. message)
 end
 
+-- Locations are traversal ordinals, never authored identifiers or source lines.
+local diagnostic_locations = {}
+local function location(id)
+  local ordinal = diagnostic_locations[id]
+  return ordinal and ('element occurrence ' .. ordinal) or 'author annotation'
+end
+
 local function escape(value)
   return value:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;')
     :gsub('"', '&quot;'):gsub("'", '&#39;')
@@ -58,11 +65,11 @@ local function enabled_config(meta)
     fail('accessible-maths options must be a mapping')
   end
   for key, value in pairs(input) do
-    if config[key] == nil then fail('unknown option ' .. tostring(key)) end
+    if config[key] == nil then fail('unknown accessible-maths option; use the documented option names') end
     if key == 'labels' then
       if pandoc.utils.type(value) ~= 'table' and pandoc.utils.type(value) ~= 'MetaMap' then fail('labels must be a mapping') end
       for name, text in pairs(value) do
-        if not config.labels[name] then fail('unknown labels option ' .. tostring(name)) end
+        if not config.labels[name] then fail('unknown labels option; use the documented generated-label names') end
         local kind = pandoc.utils.type(text)
         if kind ~= 'Inlines' and kind ~= 'string' and kind ~= 'MetaString' and kind ~= 'MetaInlines' then
           fail('labels.' .. name .. ' must be text')
@@ -113,7 +120,7 @@ end
 
 local function argument(text, position, command)
   while text:sub(position, position):match('%s') do position = position + 1 end
-  if text:sub(position, position) ~= '{' then fail('\\' .. command .. ' requires brace-delimited arguments') end
+  if text:sub(position, position) ~= '{' then fail('semantic macro requires brace-delimited arguments') end
   local start, depth = position + 1, 1
   position = position + 1
   while position <= #text do
@@ -130,7 +137,7 @@ local function argument(text, position, command)
       position = position + 1
     end
   end
-  fail('unterminated argument to \\' .. command)
+  fail('unterminated semantic macro argument; close every required brace-delimited argument')
 end
 
 -- Compile the intentionally small visual-template language once. A control
@@ -154,35 +161,35 @@ local function compile_template(template, arity, id)
   end
   while position <= #template do
     local char = template:sub(position, position)
-    if char == '%' then fail('#' .. id .. ': am-tex must not contain comments; use \\% for a literal percent')
+    if char == '%' then fail(location(id) .. ': am-tex must not contain comments; use \\% for a literal percent')
     elseif char == '\\' then
       local first, last, command = template:find('\\([A-Za-z]+)', position)
       if first == position then
         if command == 'verb' or forbidden_template_commands[command] then
-          fail('#' .. id .. ': am-tex does not support verbatim, command definitions or TeX indirection (\\' .. command .. ')')
+          fail(location(id) .. ': am-tex does not support verbatim, command definitions or TeX indirection (\\' .. command .. ')')
         end
         commands[command] = true
         literals[#literals + 1], position = template:sub(first, last), last + 1
       else
-        if position == #template then fail('#' .. id .. ': am-tex ends in an incomplete control symbol') end
+        if position == #template then fail(location(id) .. ': am-tex ends in an incomplete control symbol') end
         literals[#literals + 1], position = template:sub(position, position + 1), position + 2
       end
     elseif char == '#' then
       local number = template:match('^#(%d+)', position)
-      if not number or #number ~= 1 then fail('#' .. id .. ': am-tex placeholders must be single-digit #1 to #4') end
+      if not number or #number ~= 1 then fail(location(id) .. ': am-tex placeholders must be single-digit #1 to #4') end
       local index = tonumber(number)
-      if index < 1 or index > arity then fail('#' .. id .. ': am-tex has an undeclared argument') end
+      if index < 1 or index > arity then fail(location(id) .. ': am-tex has an undeclared argument') end
       placeholders[index] = (placeholders[index] or 0) + 1
       flush(); parts[#parts + 1] = index; position = position + 2
     else
       if char == '{' then depth = depth + 1 elseif char == '}' then depth = depth - 1 end
-      if depth < 0 then fail('#' .. id .. ': am-tex has unbalanced braces') end
+      if depth < 0 then fail(location(id) .. ': am-tex has unbalanced braces') end
       literals[#literals + 1], position = char, position + 1
     end
   end
-  if depth ~= 0 then fail('#' .. id .. ': am-tex has unbalanced braces') end
+  if depth ~= 0 then fail(location(id) .. ': am-tex has unbalanced braces') end
   for index = 1, arity do
-    if placeholders[index] ~= 1 then fail('#' .. id .. ': each am-tex #n placeholder must occur exactly once') end
+    if placeholders[index] ~= 1 then fail(location(id) .. ': each am-tex #n placeholder must occur exactly once') end
   end
   flush()
   return parts, commands
@@ -192,35 +199,35 @@ local function declare(el, registry)
   local attrs, id = el.attributes, el.identifier
   if not attrs['am-macro'] then
     for _, key in ipairs({'am-args', 'am-intent', 'am-tex'}) do
-      if attrs[key] then fail('#' .. id .. ': ' .. key .. ' requires am-macro') end
+      if attrs[key] then fail(location(id) .. ': ' .. key .. ' requires am-macro') end
     end
     return
   end
   if not id:match('^def%-') then fail('am-macro must be on a native #def- definition') end
   local command = attrs['am-macro']
   if not command:match('^am[A-Z][A-Za-z]*$') or #command > 64 or command == 'amIntent' or command == 'amArg' then
-    fail('#' .. id .. ': am-macro must start am followed by an uppercase ASCII letter; omit the backslash; amIntent/amArg are reserved')
+    fail(location(id) .. ': am-macro must start am followed by an uppercase ASCII letter; omit the backslash; amIntent/amArg are reserved')
   end
-  if registry[command] then fail('#' .. id .. ': duplicate am-macro declaration \\' .. command) end
-  if not uri(attrs['semantic-id']) then fail('#' .. id .. ': macro definition requires an absolute semantic-id URI') end
+  if registry[command] then fail(location(id) .. ': duplicate am-macro declaration; use one definition per macro') end
+  if not uri(attrs['semantic-id']) then fail(location(id) .. ': macro definition requires an absolute semantic-id URI') end
   local roles, seen = {}, {}
   for role in (attrs['am-args'] or ''):gmatch('%S+') do
-    if not named(role) or seen[role] then fail('#' .. id .. ': am-args requires unique ASCII role names') end
+    if not named(role) or seen[role] then fail(location(id) .. ': am-args requires unique ASCII role names') end
     roles[#roles + 1], seen[role] = role, true
   end
-  if #roles < 1 or #roles > 4 then fail('#' .. id .. ': declare one to four required arguments') end
+  if #roles < 1 or #roles > 4 then fail(location(id) .. ': declare one to four required arguments') end
   local intent = attrs['am-intent'] or ''
   local operator, arguments = intent:match('^([A-Za-z][A-Za-z0-9_-]*)%((.*)%)$')
-  if not named(operator) then fail('#' .. id .. ': am-intent requires operator($role,...) syntax') end
+  if not named(operator) then fail(location(id) .. ': am-intent requires operator($role,...) syntax') end
   local referenced, count = {}, 0
   for part in (arguments .. ','):gmatch('(.-),') do
     local role = part:match('^%s*%$([A-Za-z][A-Za-z0-9_-]*)%s*$')
-    if not role or not seen[role] or referenced[role] then fail('#' .. id .. ': am-intent must reference each declared role exactly once') end
+    if not role or not seen[role] or referenced[role] then fail(location(id) .. ': am-intent must reference each declared role exactly once') end
     referenced[role], count = true, count + 1
   end
-  if count ~= #roles then fail('#' .. id .. ': am-intent has missing argument roles') end
+  if count ~= #roles then fail(location(id) .. ': am-intent has missing argument roles') end
   local template = attrs['am-tex'] or ''
-  if #template == 0 or #template > 4096 then fail('#' .. id .. ': am-tex requires a non-empty bounded TeX template') end
+  if #template == 0 or #template > 4096 then fail(location(id) .. ': am-tex requires a non-empty bounded TeX template') end
   local parts, commands = compile_template(template, #roles, id)
   registry[command] = { roles=roles, intent=intent, template=template, source=id,
     semanticId=attrs['semantic-id'], parts=parts, commands=commands }
@@ -284,6 +291,7 @@ local function expand(text, registry, annotated, depth)
 end
 
 local function process(doc)
+  diagnostic_locations = {}
   local config = enabled_config(doc.meta)
   if not config.enabled then return doc end
   local html = FORMAT == 'html' or FORMAT == 'html5'
@@ -295,23 +303,26 @@ local function process(doc)
     end
   end
   local ids, semantic_ids, targets, registry, disclosures, related, declarations, summaries = {}, {}, {}, {}, {}, {}, {}, {}
+  local ordinal = 0
   local function collect(el)
+    ordinal = ordinal + 1
     local id = el.identifier
+    diagnostic_locations[id] = ordinal
     if id ~= '' then
-      if ids[id] then fail('duplicate rendered identifier #' .. id) end
+      if ids[id] then fail(location(id) .. ': duplicate rendered identifier; give each authored element a distinct identifier') end
       ids[id] = true
     end
     for key in pairs(el.attributes) do
-      if key:match('^am%-') and not author_attributes[key] then fail('#' .. id .. ': unknown attribute ' .. key) end
-      if key:match('^am%-') and el.t ~= 'Div' then fail('#' .. id .. ': ' .. key .. ' requires a definition or associated disclosure Div') end
+      if key:match('^am%-') and not author_attributes[key] then fail(location(id) .. ': unknown am- attribute; use the documented annotation names') end
+      if key:match('^am%-') and el.t ~= 'Div' then fail(location(id) .. ': ' .. key .. ' requires a definition or associated disclosure Div') end
       if (key == 'proof-for' or key == 'theorem-for') and el.t ~= 'Div' then
-        fail('#' .. id .. ': ' .. key .. ' requires an associated disclosure Div')
+        fail(location(id) .. ': ' .. key .. ' requires an associated disclosure Div')
       end
     end
     local semantic = el.attributes['semantic-id']
     if semantic then
-      if not uri(semantic) then fail('#' .. id .. ': semantic-id must be an absolute URI') end
-      if semantic_ids[semantic] then fail('duplicate semantic-id ' .. semantic .. ' in this document') end
+      if not uri(semantic) then fail(location(id) .. ': semantic-id must be an absolute URI') end
+      if semantic_ids[semantic] then fail(location(id) .. ': duplicate semantic-id; give each meaning a distinct URI in this document') end
       semantic_ids[semantic] = id
     end
   end
@@ -330,7 +341,7 @@ local function process(doc)
       el.content:walk({ Div=function(child)
         if child.classes:includes('am-explanation') or (explanation and (canonical(child)
           or child.classes:includes('am-hint') or child.classes:includes('am-assumption'))) then
-          fail('#' .. el.identifier .. ': explanations must be outside theorem/proof/hint/assumption blocks and cannot contain them or other explanations')
+          fail(location(el.identifier) .. ': explanations must be outside theorem/proof/hint/assumption blocks and cannot contain them or other explanations')
         end
       end })
     end
@@ -341,13 +352,13 @@ local function process(doc)
     for command in pairs(declaration.commands) do
       if registry[command] or command == 'amIntent' or command == 'amArg'
         then
-        fail('#' .. declaration.source .. ': am-tex must contain ordinary visual TeX, without page-local macros or macro definitions')
+        fail(location(declaration.source) .. ': am-tex must contain ordinary visual TeX, without page-local macros or macro definitions')
       end
     end
   end
   local function target(value, id)
     local resolved = value:sub(1, 1) == '#' and value:sub(2) or semantic_ids[value]
-    if not resolved or not targets[resolved] then fail('#' .. id .. ': unresolved theorem target ' .. value) end
+    if not resolved or not targets[resolved] then fail(location(id) .. ': unresolved theorem target; use an existing statement fragment or semantic-id on this page') end
     return resolved
   end
   doc.blocks:walk({ traverse='topdown', Div=function(el)
@@ -357,35 +368,35 @@ local function process(doc)
     local hint, assumption = el.classes:includes('am-hint'), el.classes:includes('am-assumption')
     local explanation = el.classes:includes('am-explanation')
     local kinds = (native_proof and 1 or 0) + (hint and 1 or 0) + (assumption and 1 or 0) + (explanation and 1 or 0)
-    if kinds > 1 then fail('#' .. id .. ': choose one disclosure kind') end
+    if kinds > 1 then fail(location(id) .. ': choose one disclosure kind') end
     if (hint or assumption or explanation) and canonical(el) then
-      fail('#' .. id .. ': explanation/hint/assumption identifiers and classes must not create a native theorem/proof/remark/solution')
+      fail(location(id) .. ': explanation/hint/assumption identifiers and classes must not create a native theorem/proof/remark/solution')
     end
-    if attrs['proof-for'] and not native_proof then fail('#' .. id .. ': proof-for requires a native .proof') end
-    if attrs['am-level'] and not explanation then fail('#' .. id .. ': am-level requires an am-explanation') end
+    if attrs['proof-for'] and not native_proof then fail(location(id) .. ': proof-for requires a native .proof') end
+    if attrs['am-level'] and not explanation then fail(location(id) .. ': am-level requires an am-explanation') end
     if not proof and not hint and not assumption and not explanation then
-      if attrs['am-summary'] then fail('#' .. id .. ': am-summary requires an associated proof, hint, assumption or explanation') end
-      if attrs['proof-for'] then fail('#' .. id .. ': proof-for requires a native .proof') end
-      if attrs['theorem-for'] then fail('#' .. id .. ': theorem-for requires an am-hint, am-assumption or am-explanation') end
+      if attrs['am-summary'] then fail(location(id) .. ': am-summary requires an associated proof, hint, assumption or explanation') end
+      if attrs['proof-for'] then fail(location(id) .. ': proof-for requires a native .proof') end
+      if attrs['theorem-for'] then fail(location(id) .. ': theorem-for requires an am-hint, am-assumption or am-explanation') end
       return
     end
     if id == '' then fail('associated disclosures require an explicit identifier') end
     if proof and not id:match('^prf%-') then fail('native proof identifiers must begin prf-') end
-    if proof and attrs['theorem-for'] then fail('#' .. id .. ': use proof-for alone for a native proof') end
+    if proof and attrs['theorem-for'] then fail(location(id) .. ': use proof-for alone for a native proof') end
     local association = proof and attrs['proof-for'] or attrs['theorem-for']
-    if not association then fail('#' .. id .. ': hints/assumptions/explanations require theorem-for') end
+    if not association then fail(location(id) .. ': hints/assumptions/explanations require theorem-for') end
     local resolved = target(association, id)
-    if explanation and not attrs['am-summary'] then fail('#' .. id .. ': am-explanation requires an authored am-summary') end
+    if explanation and not attrs['am-summary'] then fail(location(id) .. ': am-explanation requires an authored am-summary') end
     local kind = proof and 'proof' or (hint and 'hint' or (assumption and 'assumptions' or 'explanation'))
-    local summary = label(attrs['am-summary'] or config.labels[kind], '#' .. id .. ': am-summary')
-    local level = attrs['am-level'] and label(attrs['am-level'], '#' .. id .. ': am-level', 64) or nil
+    local summary = label(attrs['am-summary'] or config.labels[kind], location(id) .. ': am-summary')
+    local level = attrs['am-level'] and label(attrs['am-level'], location(id) .. ': am-level', 64) or nil
     local disclosure_id = 'am-disclosure-' .. id
-    if ids[disclosure_id] then fail('generated disclosure identifier conflicts with #' .. disclosure_id) end
+    if ids[disclosure_id] then fail(location(id) .. ': generated disclosure identifier conflicts with authored content; rename the authored identifier') end
     ids[disclosure_id] = true
     disclosures[id] = { id=disclosure_id, source=id, summary=summary, target=resolved, kind=kind, level=level }
     related[resolved] = related[resolved] or {}
     summaries[resolved] = summaries[resolved] or {}
-    if summaries[resolved][summary] then fail('#' .. id .. ': duplicate am-summary for this statement; give each related block a distinct authored label') end
+    if summaries[resolved][summary] then fail(location(id) .. ': duplicate am-summary for this statement; give each related block a distinct authored label') end
     summaries[resolved][summary] = true
     related[resolved][#related[resolved] + 1] = disclosures[id]
   end })
@@ -473,7 +484,7 @@ local function process(doc)
         destination=fragment(declaration.anchor)}
     end
     local payload = {schemaVersion=1, contractVersion='0', kind='accessible-maths-declarations',
-      producer={name='accessible-maths', version='0.0.4'},
+      producer={name='accessible-maths', version='0.0.5'},
       scope={type='document', source=source, occurrenceIds='document-local'},
       coverage='explicit-native-declarations-only', objects=objects, occurrences=occurrences}
     local json = quarto.json.encode(payload):gsub('<', '\\u003c'):gsub('>', '\\u003e'):gsub('&', '\\u0026')

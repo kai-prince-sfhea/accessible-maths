@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.5 — diagnostic and configuration refinement, 14 October 2026
+
+- Omit authored identifiers, semantic URIs, unresolved targets, macro names and
+  unknown option/attribute keys from validation messages. Keep fatal refusal,
+  known-field remedies and safe element-processing ordinals.
+- Explain native effective-namespace replacement, authoritative disabling and
+  the distinction between extension diagnostics and ordinary output/tool logs.
+- Preserve native mathematics, disclosures and annotation transport; no
+  authoring or data-format migration is introduced. Producer metadata identifies
+  this revision; unchanged browser components retain their component versions.
+
+
 ## 0.0.4 — experimental public source, 9 October 2026
 
 - Fixed print visibility for extension content inside closed authored native disclosures, without changing screen disclosure or level-selection state.
