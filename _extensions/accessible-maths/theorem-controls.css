@@ -1,22 +1,22 @@
 /* Copyright 2026 Kai Prince. SPDX-License-Identifier: Apache-2.0 */
 
 .am-disclosure {
-  margin-block: 1rem;
-  border: 1px solid currentColor;
-  border-radius: 0.25rem;
+  margin-block: var(--am-block-spacing, 1rem);
+  border: 1px solid var(--am-border-color, currentColor);
+  border-radius: var(--am-border-radius, 0.25rem);
 }
 
 .am-disclosure > summary {
   display: list-item;
   min-block-size: 2.75rem;
-  padding: 0.625rem 0.75rem;
+  padding: var(--am-summary-padding, 0.625rem 0.75rem);
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--am-summary-weight, 600);
   list-style-position: inside;
 }
 
 .am-disclosure > .am-disclosure-body {
-  padding: 0.25rem 0.75rem 0.75rem;
+  padding: var(--am-body-padding, 0.25rem 0.75rem 0.75rem);
 }
 
 .am-related {
@@ -44,9 +44,9 @@
   min-block-size: 2.75rem;
   padding: 0.375rem 0.5rem;
   color: inherit;
-  background-color: var(--bs-body-bg, Canvas);
-  border: 1px solid currentColor;
-  border-radius: 0.25rem;
+  background-color: var(--am-control-background, var(--bs-body-bg, Canvas));
+  border: 1px solid var(--am-border-color, currentColor);
+  border-radius: var(--am-border-radius, 0.25rem);
   font: inherit;
 }
 
@@ -56,7 +56,7 @@
 [data-am-disclosure]:target:focus,
 [data-am-theorem-target]:target:focus,
 .am-level-controls select:focus-visible {
-  outline: 2px solid currentColor;
+  outline: 2px solid var(--am-focus-color, currentColor);
   outline-offset: 3px;
 }
 

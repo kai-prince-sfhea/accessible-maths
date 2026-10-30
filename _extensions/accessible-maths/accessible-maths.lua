@@ -3,6 +3,11 @@
 local function fail(message)
   assert(false, 'accessible-maths: ' .. message)
 end
+local intent_grammar = dofile(pandoc.path.join({pandoc.path.directory(PANDOC_SCRIPT_FILE), 'intent-grammar.lua'}))
+local catalogue_api = dofile(pandoc.path.join({pandoc.path.directory(PANDOC_SCRIPT_FILE), 'catalogue-api.lua'}))
+local runtime_script=PANDOC_SCRIPT_FILE
+if not pandoc.path.is_absolute(runtime_script) then runtime_script=pandoc.path.join({pandoc.system.get_working_directory(),runtime_script}) end
+local runtime_directory=pandoc.path.directory(runtime_script)
 
 -- Locations are traversal ordinals, never authored identifiers or source lines.
 local diagnostic_locations = {}
@@ -14,10 +19,6 @@ end
 local function escape(value)
   return value:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;')
     :gsub('"', '&quot;'):gsub("'", '&#39;')
-end
-
-local function named(value)
-  return value and value:match('^[A-Za-z][A-Za-z0-9_-]*$') and #value <= 64
 end
 
 local function uri(value)
@@ -55,8 +56,154 @@ local function fragment(id)
   return '#' .. id:gsub('([^A-Za-z0-9._~-])', function(char) return string.format('%%%02X', char:byte()) end)
 end
 
+local function meta_text(value, field, maximum, blank)
+  local kind=pandoc.utils.type(value)
+  if kind~='string' and kind~='Inlines' and kind~='MetaString' and kind~='MetaInlines' then fail(field..' requires literal text') end
+  local result=pandoc.utils.stringify(value)
+  if #result>maximum or result:find('[<>]') then fail(field..' exceeds its text bound or contains markup') end
+  local visible=false
+  for _,code in utf8.codes(result) do
+    if code<32 or (code>=127 and code<=159) then fail(field..' must not contain control characters') end
+    local whitespace=code==32 or code==0xA0 or code==0x1680 or (code>=0x2000 and code<=0x200A) or code==0x2028 or code==0x2029 or code==0x202F or code==0x205F or code==0x3000 or code==0xFEFF
+    visible=visible or not whitespace
+  end
+  if not blank and not visible then fail(field..' must not be blank') end
+  return result
+end
+local function meta_map(value,field)
+  local kind=pandoc.utils.type(value)
+  if kind~='table' and kind~='MetaMap' then fail(field..' requires a mapping') end
+  return value
+end
+local function meta_list(value,field)
+  local kind=pandoc.utils.type(value)
+  if kind~='List' and kind~='MetaList' then fail(field..' requires a sequence') end
+  return value
+end
+local function language_tag(value)
+  if #value>63 or not value:match('^[A-Za-z][A-Za-z%-0-9]*$') or value:find('%-%-') or value:sub(-1)=='-' then return false end
+  local parts={};for part in value:gmatch('[^%-]+') do parts[#parts+1]=part end
+  if #parts[1]<2 or #parts[1]>8 or not parts[1]:match('^[A-Za-z]+$') then return false end
+  local index=2
+  if parts[index] and #parts[index]==4 and parts[index]:match('^[A-Za-z]+$') then index=index+1 end
+  if parts[index] and ((#parts[index]==2 and parts[index]:match('^[A-Za-z]+$')) or (#parts[index]==3 and parts[index]:match('^%d+$'))) then index=index+1 end
+  local seen={}
+  for at=index,#parts do local part=parts[at]
+    if not ((#part>=5 and #part<=8 and part:match('^[A-Za-z0-9]+$')) or (#part==4 and part:match('^%d[A-Za-z0-9]+$'))) or seen[part:lower()] then return false end
+    seen[part:lower()]=true
+  end
+  return true
+end
+local function braille_file(value)
+  local configured=meta_text(value,'intent-speech.braille-literals-file',4096)
+  if configured:find('[\\:%?#%c%s]') or configured:sub(1,1)=='/' or not configured:lower():match('%.ya?ml$') then
+    fail('braille-literals-file requires a relative .yml or .yaml path without URLs, encodings or whitespace')
+  end
+  local root,source=catalogue_api.source()
+  -- Inherited metadata and ordinary nested documents may point to ../shared.
+  -- Fold effective components explicitly: Pandoc normalize retains '..'. The
+  -- reader still checks every physical descendant and refuses linked aliases.
+  local parts={}
+  for part in (pandoc.path.directory(source):gsub('\\','/')..'/'..configured):gmatch('[^/]+') do
+    if part=='..' then
+      if #parts==0 then fail('braille-literals-file must remain inside the native project') end
+      table.remove(parts)
+    elseif part~='.' then parts[#parts+1]=part end
+  end
+  local filename=table.concat(parts,'/')
+  if filename=='' or filename:find('[:\\%c]') then fail('braille-literals-file must remain inside the native project') end
+  for part in filename:gmatch('[^/]+') do
+    if part=='.' or part=='..' or part:lower()=='.git' or part:lower()=='.quarto' or part:lower()=='_extensions' then fail('braille-literals-file must remain in an ordinary public-authoring project folder') end
+  end
+  local ok,output=pcall(pandoc.pipe,os.getenv('QUARTO_BIN') or 'quarto',{'run',pandoc.path.join({runtime_directory,'literal-file.ts'})},quarto.json.encode({version=1,root=root,path=filename}))
+  if not ok then fail('braille-literals-file requires an ordinary confined UTF-8 YAML file of at most 65536 bytes, without symlinks or junctions') end
+  local observed=pandoc.json.decode(output)
+  if type(observed)~='table' or observed.version~=1 or observed.path~=filename or type(observed.raw)~='string' or #observed.raw>65536 then fail('braille-literals-file returned invalid literal data') end
+  local data=dofile(pandoc.path.join({runtime_directory,'literal-yaml.lua'})).decode(observed.raw,{fail=fail,json=pandoc.json.decode,list=function()return pandoc.List()end,null=pandoc.json.decode('null')})
+  data=meta_map(data,'braille-literals-file')
+  for key in pairs(data) do if key~='version' and key~='braille-literals' then fail('braille-literals-file contains an unknown field') end end
+  if data.version~=1 or data['braille-literals']==nil then fail('braille-literals-file requires version: 1 and a braille-literals sequence') end
+  return meta_list(data['braille-literals'],'braille-literals-file.braille-literals')
+end
+local function realisations(value)
+  value=meta_map(value,'intent-speech')
+  local allowed={enabled=true,language=true,rules=true,['braille-literals']=true,['braille-literals-file']=true}
+  for key in pairs(value) do if not allowed[key] then fail('unknown intent-speech option') end end
+  if value.enabled~=nil and type(value.enabled)~='boolean' then fail('intent-speech.enabled requires a boolean') end
+  local result={version=1,language=value.language and meta_text(value.language,'intent-speech.language',63) or 'en',rules={},['braille-literals']={}}
+  if not language_tag(result.language) then fail('intent-speech.language requires a supported well-formed BCP47 tag') end
+  local ids,concepts={},{}
+  local function common(entry,field,keys)
+    entry=meta_map(entry,field)
+    for key in pairs(entry) do if not keys[key] then fail(field..' contains an unknown field') end end
+    local record={id=meta_text(entry.id,field..'.id',64),revision=meta_text(entry.revision,field..'.revision',128),
+      review=meta_text(entry.review,field..'.review',32),['reviewed-by']=meta_text(entry['reviewed-by'],field..'.reviewed-by',256)}
+    if not record.id:match('^[a-z][a-z0-9%-]*$') or ids[record.id] then fail(field..' requires distinct lowercase IDs') end
+    ids[record.id]=true
+    if record.review~='author-reviewed' then fail(field..'.review must be author-reviewed') end
+    return entry,record
+  end
+  if value.rules then
+    local rules=meta_list(value.rules,'intent-speech.rules');if #rules>32 then fail('intent-speech.rules exceeds 32 entries') end
+    for _,raw in ipairs(rules) do
+      local entry,record=common(raw,'intent-speech rule',{id=true,revision=true,concept=true,roles=true,template=true,review=true,['reviewed-by']=true})
+      record.concept=meta_text(entry.concept,'speech concept',64)
+      if not intent_grammar.isNCName(record.concept,64) or concepts[record.concept] then fail('speech concepts require distinct Unicode NCNames') end
+      concepts[record.concept]=true;record.roles={};local roles={}
+      for _,rawRole in ipairs(meta_list(entry.roles,'speech roles')) do
+        local role=meta_text(rawRole,'speech role',64)
+        if not intent_grammar.isNCName(role,64) or roles[role] then fail('speech roles require distinct Unicode NCNames') end
+        record.roles[#record.roles+1]=role;roles[role]=0
+      end
+      if #record.roles<1 or #record.roles>4 then fail('speech rules require one to four roles') end
+      record.template=meta_text(entry.template,'speech template',1024)
+      if record.template:find('[<>]') then fail('speech template requires plain text without markup') end
+      local rest=record.template:gsub('{([^{}]+)}',function(role)
+        if roles[role]==nil then fail('speech template contains an undeclared role') end
+        roles[role]=roles[role]+1;return ''
+      end)
+      if rest:find('[{}]') then fail('speech template contains unmatched braces') end
+      for _,count in pairs(roles) do if count~=1 then fail('speech template must use each role exactly once') end end
+      result.rules[#result.rules+1]=record
+    end
+  end
+  local entries={}
+  if value['braille-literals'] then
+    local inline=meta_list(value['braille-literals'],'intent-speech.braille-literals')
+    if #inline>0 then fail('exact Braille cells cannot use Markdown metadata; put the literal records in a YAML braille-literals-file instead') end
+  end
+  if value['braille-literals-file']~=nil then entries=braille_file(value['braille-literals-file']) end
+  if #entries>16 then fail('braille-literals exceeds 16 entries') end
+  if #entries>0 then
+    for _,raw in ipairs(entries) do
+      local entry,record=common(raw,'braille literal',{id=true,revision=true,['expression-sha256']=true,meaning=true,code=true,language=true,cells=true,review=true,['reviewed-by']=true})
+      record['expression-sha256']=meta_text(entry['expression-sha256'],'braille expression-sha256',64)
+      if #record['expression-sha256']~=64 or not record['expression-sha256']:match('^[a-f0-9]+$') then fail('braille expression-sha256 requires 64 lowercase hexadecimal digits') end
+      record.meaning=meta_text(entry.meaning,'braille meaning',2048)
+      if not intent_grammar.parseIntent(record.meaning) then fail('braille meaning requires a valid bounded intent') end
+      record.code=meta_text(entry.code,'braille code',128);record.language=meta_text(entry.language,'braille language',63)
+      if not language_tag(record.language) then fail('braille language requires a supported well-formed BCP47 tag') end
+      -- This value comes directly from the literal YAML reader, never Markdown.
+      if type(entry.cells)~='string' then fail('braille cells require literal text from braille-literals-file') end
+      record.cells=entry.cells
+      if #record.cells>4096 then fail('braille cells exceed 4096 UTF-8 bytes') end
+      local visible=false
+      for _,code in utf8.codes(record.cells) do
+        if code~=32 and code~=10 and (code<0x2800 or code>0x28FF) then fail('braille cells allow only Unicode Braille, spaces and line feeds') end
+        if code>0x2800 and code<=0x28FF then visible=true end
+      end
+      if not visible then fail('braille cells require a nonblank Unicode Braille cell') end
+      result['braille-literals'][#result['braille-literals']+1]=record
+    end
+  end
+  local function array(entries)local out={};for _,entry in ipairs(entries) do out[#out+1]=quarto.json.encode(entry) end;return '['..table.concat(out,',')..']' end
+  local json='{"version":1,"language":'..quarto.json.encode(result.language)..',"rules":'..array(result.rules)..',"braille-literals":'..array(result['braille-literals'])..'}'
+  if #json>65536 then fail('intent-speech realisations exceed 65536 UTF-8 bytes') end
+  return value.enabled~=false,result,json
+end
+
 local function enabled_config(meta)
-  local config = { enabled = true, ['theorem-controls'] = true, semantics = 'off', ['mathml-output']='internal',
+  local config = { enabled = true, ['theorem-controls'] = true, semantics = 'off', ['mathml-output']='internal', ['intent-speech']=false,catalogue=false,
     labels = { proof='Proof', hint='Hint', assumptions='Assumptions',
       related='Explore this statement', back='Back to statement', level='Explanation level', all='All explanations' } }
   local input = meta['accessible-maths']
@@ -65,7 +212,7 @@ local function enabled_config(meta)
     fail('accessible-maths options must be a mapping')
   end
   for key, value in pairs(input) do
-    if config[key] == nil then fail('unknown accessible-maths option; use the documented option names') end
+    if not ({enabled=true,['theorem-controls']=true,semantics=true,['mathml-output']=true,['intent-speech']=true,catalogue=true,labels=true})[key] then fail('unknown accessible-maths option; use the documented option names') end
     if key == 'labels' then
       if pandoc.utils.type(value) ~= 'table' and pandoc.utils.type(value) ~= 'MetaMap' then fail('labels must be a mapping') end
       for name, text in pairs(value) do
@@ -84,6 +231,8 @@ local function enabled_config(meta)
       local mode = pandoc.utils.stringify(value)
       if mode ~= 'off' and mode ~= 'author-annotated' then fail('semantics must be off or author-annotated') end
       config[key] = mode
+    elseif key=='intent-speech' and type(value)~='boolean' then
+      config[key],config.realisations,config.realisations_json=realisations(value)
     else
       if type(value) ~= 'boolean' then fail(key .. ' must be a boolean') end
       config[key] = value
@@ -91,6 +240,9 @@ local function enabled_config(meta)
   end
   if config.enabled and config['mathml-output'] == 'assistive' and config.semantics ~= 'author-annotated' then
     fail('mathml-output: assistive requires semantics: author-annotated')
+  end
+  if config.enabled and config['intent-speech'] and config.semantics ~= 'author-annotated' then
+    fail('intent-speech: true requires semantics: author-annotated')
   end
   return config
 end
@@ -103,192 +255,11 @@ local function canonical(el)
     or el.classes:includes('proof') or el.classes:includes('remark') or el.classes:includes('solution')
 end
 local author_attributes = { ['am-summary']=true, ['am-level']=true, ['am-macro']=true,
-  ['am-args']=true, ['am-intent']=true, ['am-tex']=true }
+  ['am-args']=true, ['am-intent']=true, ['am-tex']=true,['am-optional']=true,['am-default']=true,
+  ['am-review']=true,['am-public']=true,['am-scope']=true }
 
 -- Only required brace-delimited arguments are supported. Escaped braces do not
 -- change the nesting level. Code spans/blocks are never passed to this parser.
-local function verbatim_end(text, last)
-  local delimiter_position = last + 1
-  if text:sub(delimiter_position, delimiter_position) == '*' then delimiter_position = delimiter_position + 1 end
-  local delimiter = text:sub(delimiter_position, delimiter_position)
-  if delimiter == '' or delimiter:match('%s') then fail('\\verb requires a non-space delimiter') end
-  local ending = text:find(delimiter, delimiter_position + 1, true)
-  local newline = text:find('\n', delimiter_position + 1, true)
-  if not ending or (newline and newline < ending) then fail('unterminated \\verb literal') end
-  return ending
-end
-
-local function argument(text, position, command)
-  while text:sub(position, position):match('%s') do position = position + 1 end
-  if text:sub(position, position) ~= '{' then fail('semantic macro requires brace-delimited arguments') end
-  local start, depth = position + 1, 1
-  position = position + 1
-  while position <= #text do
-    local char = text:sub(position, position)
-    if char == '\\' then
-      local first, last, control = text:find('\\([A-Za-z]+)', position)
-      if first == position and control == 'verb' then position = verbatim_end(text, last) + 1
-      else position = position + 2 end
-    elseif char == '%' then position = (text:find('\n', position, true) or #text) + 1
-    else
-      if char == '{' then depth = depth + 1 end
-      if char == '}' then depth = depth - 1 end
-      if depth == 0 then return text:sub(start, position - 1), position + 1 end
-      position = position + 1
-    end
-  end
-  fail('unterminated semantic macro argument; close every required brace-delimited argument')
-end
-
--- Compile the intentionally small visual-template language once. A control
--- symbol such as \# is literal; comments/verbatim/command definitions cannot
--- hide required arguments. This is authoring validation, not TeX sanitization.
-local forbidden_template_commands = {}
-for _, command in ipairs({'def','gdef','edef','xdef','let','futurelet','newcommand','renewcommand',
-  'providecommand','DeclareRobustCommand','DeclareMathOperator','newenvironment','renewenvironment',
-  'NewDocumentCommand','RenewDocumentCommand','ProvideDocumentCommand','DeclareDocumentCommand',
-  'NewExpandableDocumentCommand','RenewExpandableDocumentCommand','ProvideExpandableDocumentCommand',
-  'DeclareExpandableDocumentCommand','csname','endcsname','catcode','global','long','outer',
-  'chardef','mathchardef','countdef','dimendef','skipdef','muskipdef','toksdef','font',
-  'newif','newcount','newdimen','newskip','newmuskip','newtoks','newfont'}) do
-  forbidden_template_commands[command] = true
-end
-local function compile_template(template, arity, id)
-  local parts, literals, commands, placeholders = {}, {}, {}, {}
-  local position, depth = 1, 0
-  local function flush()
-    if #literals > 0 then parts[#parts + 1] = table.concat(literals); literals = {} end
-  end
-  while position <= #template do
-    local char = template:sub(position, position)
-    if char == '%' then fail(location(id) .. ': am-tex must not contain comments; use \\% for a literal percent')
-    elseif char == '\\' then
-      local first, last, command = template:find('\\([A-Za-z]+)', position)
-      if first == position then
-        if command == 'verb' or forbidden_template_commands[command] then
-          fail(location(id) .. ': am-tex does not support verbatim, command definitions or TeX indirection (\\' .. command .. ')')
-        end
-        commands[command] = true
-        literals[#literals + 1], position = template:sub(first, last), last + 1
-      else
-        if position == #template then fail(location(id) .. ': am-tex ends in an incomplete control symbol') end
-        literals[#literals + 1], position = template:sub(position, position + 1), position + 2
-      end
-    elseif char == '#' then
-      local number = template:match('^#(%d+)', position)
-      if not number or #number ~= 1 then fail(location(id) .. ': am-tex placeholders must be single-digit #1 to #4') end
-      local index = tonumber(number)
-      if index < 1 or index > arity then fail(location(id) .. ': am-tex has an undeclared argument') end
-      placeholders[index] = (placeholders[index] or 0) + 1
-      flush(); parts[#parts + 1] = index; position = position + 2
-    else
-      if char == '{' then depth = depth + 1 elseif char == '}' then depth = depth - 1 end
-      if depth < 0 then fail(location(id) .. ': am-tex has unbalanced braces') end
-      literals[#literals + 1], position = char, position + 1
-    end
-  end
-  if depth ~= 0 then fail(location(id) .. ': am-tex has unbalanced braces') end
-  for index = 1, arity do
-    if placeholders[index] ~= 1 then fail(location(id) .. ': each am-tex #n placeholder must occur exactly once') end
-  end
-  flush()
-  return parts, commands
-end
-
-local function declare(el, registry)
-  local attrs, id = el.attributes, el.identifier
-  if not attrs['am-macro'] then
-    for _, key in ipairs({'am-args', 'am-intent', 'am-tex'}) do
-      if attrs[key] then fail(location(id) .. ': ' .. key .. ' requires am-macro') end
-    end
-    return
-  end
-  if not id:match('^def%-') then fail('am-macro must be on a native #def- definition') end
-  local command = attrs['am-macro']
-  if not command:match('^am[A-Z][A-Za-z]*$') or #command > 64 or command == 'amIntent' or command == 'amArg' then
-    fail(location(id) .. ': am-macro must start am followed by an uppercase ASCII letter; omit the backslash; amIntent/amArg are reserved')
-  end
-  if registry[command] then fail(location(id) .. ': duplicate am-macro declaration; use one definition per macro') end
-  if not uri(attrs['semantic-id']) then fail(location(id) .. ': macro definition requires an absolute semantic-id URI') end
-  local roles, seen = {}, {}
-  for role in (attrs['am-args'] or ''):gmatch('%S+') do
-    if not named(role) or seen[role] then fail(location(id) .. ': am-args requires unique ASCII role names') end
-    roles[#roles + 1], seen[role] = role, true
-  end
-  if #roles < 1 or #roles > 4 then fail(location(id) .. ': declare one to four required arguments') end
-  local intent = attrs['am-intent'] or ''
-  local operator, arguments = intent:match('^([A-Za-z][A-Za-z0-9_-]*)%((.*)%)$')
-  if not named(operator) then fail(location(id) .. ': am-intent requires operator($role,...) syntax') end
-  local referenced, count = {}, 0
-  for part in (arguments .. ','):gmatch('(.-),') do
-    local role = part:match('^%s*%$([A-Za-z][A-Za-z0-9_-]*)%s*$')
-    if not role or not seen[role] or referenced[role] then fail(location(id) .. ': am-intent must reference each declared role exactly once') end
-    referenced[role], count = true, count + 1
-  end
-  if count ~= #roles then fail(location(id) .. ': am-intent has missing argument roles') end
-  local template = attrs['am-tex'] or ''
-  if #template == 0 or #template > 4096 then fail(location(id) .. ': am-tex requires a non-empty bounded TeX template') end
-  local parts, commands = compile_template(template, #roles, id)
-  registry[command] = { roles=roles, intent=intent, template=template, source=id,
-    semanticId=attrs['semantic-id'], parts=parts, commands=commands }
-end
-
-local function expand(text, registry, annotated, depth)
-  if #text > 65536 or depth > 16 then fail('semantic macro expansion exceeds its size or nesting limit') end
-  local result, position, size = {}, 1, 0
-  while position <= #text do
-    do
-    local char = text:sub(position, position)
-    if char == '%' then
-      local ending = text:find('\n', position, true) or #text
-      result[#result + 1], position = text:sub(position, ending), ending + 1
-      goto continue
-    elseif char ~= '\\' then
-      -- Copy ordinary TeX in runs. Only backslashes and comments can alter
-      -- lexical treatment here; keep their existing validation paths intact.
-      local ending = text:find('[\\%%]', position) or (#text + 1)
-      result[#result + 1], position = text:sub(position, ending - 1), ending
-      goto continue
-    end
-    local first, last, command = text:find('\\([A-Za-z]+)', position)
-    if first ~= position then
-      result[#result + 1], position = text:sub(position, position + 1), position + 2
-      goto continue
-    end
-    if command == 'verb' then
-      local ending = verbatim_end(text, last)
-      result[#result + 1], position = text:sub(position, ending), ending + 1
-      goto continue
-    end
-    local declaration = registry[command]
-    if command == 'amIntent' or command == 'amArg' then fail('amIntent/amArg are internal helpers; declare an am-macro on a definition') end
-    if declaration then
-      local values, next_position = {}, last + 1
-      for index, role in ipairs(declaration.roles) do
-        local value
-        value, next_position = argument(text, next_position, command)
-        value = expand(value, registry, annotated, depth + 1)
-        values[index] = annotated and ('\\amArg{' .. role .. '}{' .. value .. '}') or ('{' .. value .. '}')
-      end
-      local replacement_parts = {}
-      for _, part in ipairs(declaration.parts) do
-        replacement_parts[#replacement_parts + 1] = type(part) == 'number' and values[part] or part
-      end
-      local replacement = table.concat(replacement_parts)
-      if annotated then replacement = '\\amIntent{' .. declaration.intent .. '}{' .. replacement .. '}' end
-      result[#result + 1], position = replacement, next_position
-      size = size + #replacement
-      if size > 65536 then fail('semantic macro expansion exceeds its size limit') end
-    else
-      result[#result + 1], position = text:sub(first, last), last + 1
-    end
-    end
-    ::continue::
-  end
-  local output = table.concat(result)
-  if #output > 65536 then fail('expanded expression exceeds 65536 bytes') end
-  return output
-end
 
 local function process(doc)
   diagnostic_locations = {}
@@ -301,6 +272,24 @@ local function process(doc)
       or method.url ~= 'https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js' then
       fail('author-annotated HTML requires native html-math-method: {method: mathjax, url: https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js}; pin the single native loader')
     end
+  end
+  -- Quarto's website metadata pipeline temporarily appends hidden copies of
+  -- title/social-description markup to the body. They are removed by native
+  -- finalization, so repeated IDs there are not rendered-body identities.
+  -- Keep the exact container out of every AM body/API pass, then put that same
+  -- untouched tree back at its original position. Metadata annotations remain
+  -- outside AM's authoring contract; ordinary hidden body content stays checked.
+  local metadata_slots, metadata_envelopes, original_block_count = {}, {}, #doc.blocks
+  if html then
+    local body = pandoc.Blocks({})
+    for index, block in ipairs(doc.blocks) do
+      if block.t == 'Div' and block.identifier == 'quarto-meta-markdown'
+          and block.classes:includes('hidden') then
+        metadata_slots[index] = block
+        metadata_envelopes[#metadata_envelopes + 1] = block
+      else body:insert(block) end
+    end
+    if #metadata_envelopes > 0 then doc.blocks = body end
   end
   local ids, semantic_ids, targets, registry, disclosures, related, declarations, summaries = {}, {}, {}, {}, {}, {}, {}, {}
   local ordinal = 0
@@ -320,12 +309,15 @@ local function process(doc)
       end
     end
     local semantic = el.attributes['semantic-id']
-    if semantic then
+    if semantic and catalogue_api.owns_semantic_identity(el) then
       if not uri(semantic) then fail(location(id) .. ': semantic-id must be an absolute URI') end
       if semantic_ids[semantic] then fail(location(id) .. ': duplicate semantic-id; give each meaning a distinct URI in this document') end
       semantic_ids[semantic] = id
     end
   end
+  -- Reserve the native container's own ID, so authored body markup cannot
+  -- collide with it or create a second apparent transport container.
+  for _, envelope in ipairs(metadata_envelopes) do collect(envelope) end
   doc.blocks:walk({ Div=function(el)
     collect(el)
     local prefix = el.identifier:match('^([a-z]+)%-')
@@ -345,17 +337,21 @@ local function process(doc)
         end
       end })
     end
-    declare(el, registry)
   end, Header=collect, Span=collect, Code=collect, CodeBlock=collect,
     Link=collect, Image=collect, Table=collect, Figure=collect })
-  for _, declaration in pairs(registry) do
-    for command in pairs(declaration.commands) do
-      if registry[command] or command == 'amIntent' or command == 'amArg'
-        then
-        fail(location(declaration.source) .. ': am-tex must contain ordinary visual TeX, without page-local macros or macro definitions')
-      end
+  if doc.meta['accessible-maths-catalogue'] then fail('reserved accessible-maths-catalogue metadata is already present') end
+  local authoring=catalogue_api.prepare(doc)
+  local catalogue=catalogue_api.capture(doc,authoring)
+  if config.catalogue then
+    local packet=catalogue.status=='empty' and ('{"version":1,"kind":"accessible-maths-catalogue","status":"empty","source":'..quarto.json.encode(catalogue.source)..',"records":[]}') or quarto.json.encode(catalogue)
+    doc.meta['accessible-maths-catalogue']=pandoc.MetaString(packet)
+    if html then
+      if ids['accessible-maths-catalogue'] then fail('reserved catalogue identifier conflicts with authored content') end
+      local safe=packet:gsub('<','\\u003c'):gsub('>','\\u003e'):gsub('&','\\u0026'):gsub(utf8.char(0x2028),'\\u2028'):gsub(utf8.char(0x2029),'\\u2029')
+      quarto.doc.include_text('after-body','<script type="application/json" id="accessible-maths-catalogue">'..safe..'</script>')
     end
   end
+  registry=authoring.root.env
   local function target(value, id)
     local resolved = value:sub(1, 1) == '#' and value:sub(2) or semantic_ids[value]
     if not resolved or not targets[resolved] then fail(location(id) .. ': unresolved theorem target; use an existing statement fragment or semantic-id on this page') end
@@ -400,16 +396,10 @@ local function process(doc)
     summaries[resolved][summary] = true
     related[resolved][#related[resolved] + 1] = disclosures[id]
   end })
-  local math_count, has_registry = 0, next(registry) ~= nil
-  local annotated = html and config.semantics == 'author-annotated'
-  local rewrite = {}
-  if has_registry or annotated then rewrite.Math = function(el)
-    math_count = math_count + 1
-    if has_registry then
-      el.text = expand(el.text, registry, annotated, 0)
-    end
-    return el
-  end end
+  local math_count=0
+  local annotated=html and config.semantics=='author-annotated'
+  if authoring.macroCount>0 or annotated then doc,math_count=catalogue_api.rewrite(doc,authoring,annotated) end
+  local rewrite={}
   if next(disclosures) then rewrite.Div = function(el)
     local record = disclosures[el.identifier]
     if html and config['theorem-controls'] and record then
@@ -448,16 +438,27 @@ local function process(doc)
   -- need no final transforming AST walk when neither feature is used.
   if next(rewrite) then doc.blocks = doc.blocks:walk(rewrite) end
   if html and config['theorem-controls'] and next(disclosures) then
-    quarto.doc.add_html_dependency({ name='accessible-maths-controls', version='0.0.4',
+    quarto.doc.add_html_dependency({ name='accessible-maths-controls', version='0.0.9',
       scripts={'theorem-controls.js'}, stylesheets={'theorem-controls.css'} })
   end
   if html and config.semantics == 'author-annotated' and math_count > 0 then
-    quarto.doc.add_html_dependency({ name='accessible-maths-semantics', version='0.0.4',
-      scripts={{path='mathjax-adapter.js', attribs={['data-am-mathml-output']=config['mathml-output']}}} })
+    local attributes={['data-am-mathml-output']=config['mathml-output']}
+    if config['intent-speech'] then attributes['data-am-intent-speech']='true' end
+    if config['intent-speech'] and config.realisations_json then
+      if ids['accessible-maths-realisations'] then fail('reserved realisations identifier conflicts with authored content') end
+      local json=config.realisations_json:gsub('<','\\u003c'):gsub('>','\\u003e'):gsub('&','\\u0026'):gsub(utf8.char(0x2028),'\\u2028'):gsub(utf8.char(0x2029),'\\u2029')
+      quarto.doc.include_text('in-header','<script type="application/json" id="accessible-maths-realisations">'..json..'</script>')
+      attributes['data-am-realisations']='accessible-maths-realisations'
+    end
+    quarto.doc.add_html_dependency({ name='accessible-maths-semantics', version='0.0.9',
+      scripts={'intent-grammar.js','intent-speech.js',{path='mathjax-adapter.js', attribs=attributes}},
+      stylesheets=config['intent-speech'] and {'intent-speech.css'} or {} })
   end
   -- Page-local interoperability data is inert, explicit and independent of the
   -- renderer. This is a declarations slice of shared v0, not a KG snapshot or
   -- an inference about expressions, mathematical truth or included-file spans.
+  declarations={}
+  for _,entry in ipairs(authoring.declarations) do if entry.exportable then declarations[#declarations+1]=entry end end
   if html and #declarations > 0 then
     if ids['accessible-maths-declarations'] then fail('reserved declaration payload identifier #accessible-maths-declarations conflicts with authored content') end
     local input = quarto.doc.input_file
@@ -468,9 +469,7 @@ local function process(doc)
     end
     local language = doc.meta.lang and pandoc.utils.stringify(doc.meta.lang) or 'und'
     local objects, occurrences, notation_by_id = {}, {}, {}
-    for command, notation in pairs(registry) do
-      notation_by_id[notation.semanticId] = {command=command, roles=notation.roles, intent=notation.intent, visualTeX=notation.template}
-    end
+    for anchor,notation in pairs(authoring.notations) do notation_by_id[anchor]=catalogue_api.notation(notation) end
     table.sort(declarations, function(a, b) return a.id < b.id end)
     for _, declaration in ipairs(declarations) do
       local location = {document=source, anchor=declaration.anchor, precision='anchor'}
@@ -478,18 +477,29 @@ local function process(doc)
         labels={{language=language, text=declaration.label}}, origin='author-declared',
         reviewStatus='not-asserted', source=location,
         publication={decision='rendered-source', licence='not-asserted'}}
-      object.notation = notation_by_id[declaration.id]
+      object.notation = notation_by_id[declaration.anchor]
       objects[#objects + 1] = object
       occurrences[#occurrences + 1] = {id=declaration.anchor, target=declaration.id, source=location,
         destination=fragment(declaration.anchor)}
     end
     local payload = {schemaVersion=1, contractVersion='0', kind='accessible-maths-declarations',
-      producer={name='accessible-maths', version='0.0.5'},
+      producer={name='accessible-maths', version='0.0.9'},
       scope={type='document', source=source, occurrenceIds='document-local'},
       coverage='explicit-native-declarations-only', objects=objects, occurrences=occurrences}
     local json = quarto.json.encode(payload):gsub('<', '\\u003c'):gsub('>', '\\u003e'):gsub('&', '\\u0026')
       :gsub(utf8.char(0x2028), '\\u2028'):gsub(utf8.char(0x2029), '\\u2029')
     quarto.doc.include_text('after-body', '<script type="application/json" id="accessible-maths-declarations">' .. json .. '</script>')
+  end
+  if #metadata_envelopes > 0 then
+    if #doc.blocks ~= original_block_count - #metadata_envelopes then
+      fail('native metadata transport could not be restored without changing body order')
+    end
+    local restored, next_body = pandoc.Blocks({}), 1
+    for index = 1, original_block_count do
+      if metadata_slots[index] then restored:insert(metadata_slots[index])
+      else restored:insert(doc.blocks[next_body]); next_body = next_body + 1 end
+    end
+    doc.blocks = restored
   end
   return doc
 end

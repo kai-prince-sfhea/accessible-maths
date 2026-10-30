@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:accessible-maths:braille-literals:1",
+  "title": "Accessible Maths exact Braille literal file, schema1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "braille-literals"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "braille-literals": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "options.schema.json#/$defs/brailleLiteral"
+      }
+    }
+  },
+  "description": "Bounded literal YAML file read without Markdown interpretation;65536 original UTF8 bytes. Use cells: |- to preserve exact spaces and LF without a final line feed. Author review is a declaration, not verification of Braille correctness."
+}

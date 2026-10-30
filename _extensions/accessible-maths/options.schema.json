@@ -6,27 +6,321 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "enabled": { "type": "boolean", "default": true },
-    "theorem-controls": { "type": "boolean", "default": true },
-    "semantics": { "type": "string", "enum": ["off", "author-annotated"], "default": "off" },
-    "mathml-output": { "type": "string", "enum": ["internal", "assistive"], "default": "internal" },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "theorem-controls": {
+      "type": "boolean",
+      "default": true
+    },
+    "semantics": {
+      "type": "string",
+      "enum": [
+        "off",
+        "author-annotated"
+      ],
+      "default": "off"
+    },
+    "intent-speech": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "language": {
+              "$ref": "#/$defs/language",
+              "default": "en"
+            },
+            "rules": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "$ref": "#/$defs/speechRule"
+              }
+            },
+            "braille-literals": {
+              "type": "array",
+              "maxItems": 0,
+              "items": {
+                "$ref": "#/$defs/brailleLiteral"
+              },
+              "description": "Empty compatibility marker only. Nonempty exact literal records must be in braille-literals-file because native Markdown metadata normalizes whitespace."
+            },
+            "braille-literals-file": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "description": "Ordinary UTF-8 .yml/.yaml file relative to the containing QMD, confined to the project, maximum65536 bytes. Literal wrapper version:1 plus braille-literals sequence preserves exact cells; no aliases/tags/duplicate keys/multiple YAML documents. No whitespace in the configured path."
+            }
+          }
+        }
+      ],
+      "default": false,
+      "description": "Finite author-reviewed realisations; mappings require the actual initialized SRE locale to match. Total payload65536 UTF8 bytes; IDs unique across rules and file-loaded literals. Exact Braille data uses braille-literals-file."
+    },
+    "mathml-output": {
+      "type": "string",
+      "enum": [
+        "internal",
+        "assistive"
+      ],
+      "default": "internal"
+    },
     "labels": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "proof": { "$ref": "#/$defs/label", "default": "Proof" },
-        "hint": { "$ref": "#/$defs/label", "default": "Hint" },
-        "assumptions": { "$ref": "#/$defs/label", "default": "Assumptions" },
-        "related": { "$ref": "#/$defs/label", "default": "Explore this statement" },
-        "back": { "$ref": "#/$defs/label", "default": "Back to statement" },
-        "level": { "$ref": "#/$defs/label", "default": "Explanation level" },
-        "all": { "$ref": "#/$defs/label", "default": "All explanations" }
+        "proof": {
+          "$ref": "#/$defs/label",
+          "default": "Proof"
+        },
+        "hint": {
+          "$ref": "#/$defs/label",
+          "default": "Hint"
+        },
+        "assumptions": {
+          "$ref": "#/$defs/label",
+          "default": "Assumptions"
+        },
+        "related": {
+          "$ref": "#/$defs/label",
+          "default": "Explore this statement"
+        },
+        "back": {
+          "$ref": "#/$defs/label",
+          "default": "Back to statement"
+        },
+        "level": {
+          "$ref": "#/$defs/label",
+          "default": "Explanation level"
+        },
+        "all": {
+          "$ref": "#/$defs/label",
+          "default": "All explanations"
+        }
       }
+    },
+    "catalogue": {
+      "type": "boolean",
+      "default": false,
+      "description": "Opt into current-native-AST reviewed catalogue capture. Each exported declaration separately requires am-review, am-public and am-scope."
     }
   },
-  "allOf": [{
-    "if": { "properties": { "mathml-output": { "const": "assistive" }, "enabled": { "const": true } }, "required": ["mathml-output"] },
-    "then": { "properties": { "semantics": { "const": "author-annotated" } }, "required": ["semantics"] }
-  }],
-  "$defs": { "label": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Lua normalizes Unicode whitespace and requires visible nonblank text of at most 256 UTF-8 bytes." } }
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mathml-output": {
+            "const": "assistive"
+          },
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "mathml-output"
+        ]
+      },
+      "then": {
+        "properties": {
+          "semantics": {
+            "const": "author-annotated"
+          }
+        },
+        "required": [
+          "semantics"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "intent-speech": {
+            "const": true
+          },
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "intent-speech"
+        ]
+      },
+      "then": {
+        "properties": {
+          "semantics": {
+            "const": "author-annotated"
+          }
+        },
+        "required": [
+          "semantics"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "intent-speech": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "intent-speech"
+        ]
+      },
+      "then": {
+        "properties": {
+          "semantics": {
+            "const": "author-annotated"
+          }
+        },
+        "required": [
+          "semantics"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Lua normalizes Unicode whitespace and requires visible nonblank text of at most 256 UTF-8 bytes."
+    },
+    "language": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*$",
+      "description": "Supported well-formed BCP47 subset; runtime also refuses duplicate case-folded variants. No extensions, private use or alias fallback."
+    },
+    "speechRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "concept",
+        "roles",
+        "template",
+        "review",
+        "reviewed-by"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "review": {
+          "const": "author-reviewed"
+        },
+        "reviewed-by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "concept": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Exact Unicode XML NCName, limited to64 UTF8 bytes by runtime."
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Plain text with exactly one {role} slot for each declared role. No other braces, markup or controls;1024 UTF8 bytes."
+        }
+      }
+    },
+    "brailleLiteral": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "expression-sha256",
+        "meaning",
+        "code",
+        "language",
+        "cells",
+        "review",
+        "reviewed-by"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "review": {
+          "const": "author-reviewed"
+        },
+        "reviewed-by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "expression-sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "language": {
+          "$ref": "#/$defs/language"
+        },
+        "cells": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[⠀-⣿ \n]+$",
+          "description": "Exact authored Unicode Braille cells, spaces and LF only;4096 UTF8 bytes and at leastone nonblank cell. Display/export only; never replaces native braille."
+        }
+      }
+    }
+  }
 }

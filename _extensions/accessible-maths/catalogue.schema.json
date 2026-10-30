@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:accessible-maths:catalogue:1",
+  "title": "Current-native Accessible Maths reviewed catalogue",
+  "description": "Containing-document byte identity and normalized expanded declaration hashes. No original include spans, mathematical equivalence, proof validity or authenticated review/rights.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "kind",
+        "status"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "accessible-maths-catalogue"
+        },
+        "status": {
+          "const": "disabled"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "kind",
+        "status",
+        "source",
+        "records"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "accessible-maths-catalogue"
+        },
+        "status": {
+          "const": "empty"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "document",
+            "precision"
+          ],
+          "properties": {
+            "document": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "precision": {
+              "const": "containing-document"
+            }
+          }
+        },
+        "records": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "kind",
+        "status",
+        "producer",
+        "source",
+        "declarationsSha256",
+        "records"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "accessible-maths-catalogue"
+        },
+        "status": {
+          "const": "complete"
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "name": {
+              "const": "accessible-maths"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "document",
+            "precision",
+            "sha256"
+          ],
+          "properties": {
+            "document": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "precision": {
+              "const": "containing-document"
+            },
+            "sha256": {
+              "$ref": "#/$defs/hash"
+            }
+          }
+        },
+        "declarationsSha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "lexicalScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "document"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "anchor"
+          ],
+          "properties": {
+            "kind": {
+              "const": "div"
+            },
+            "anchor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        }
+      ]
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "parameters"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "parameters": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "kind"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "kind": {
+                "enum": [
+                  "required",
+                  "optional"
+                ]
+              },
+              "defaultTeX": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 1024
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "optional"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "defaultTeX"
+                  ]
+                },
+                "else": {
+                  "not": {
+                    "required": [
+                      "defaultTeX"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "label",
+        "anchor",
+        "scope",
+        "review",
+        "public",
+        "lexicalScope",
+        "bodySha256",
+        "declarationSha256"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "type": {
+          "enum": [
+            "thm",
+            "lem",
+            "cor",
+            "prp",
+            "cnj",
+            "def",
+            "exm",
+            "exr"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "anchor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "scope": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "review": {
+          "const": "author-reviewed"
+        },
+        "public": {
+          "const": true
+        },
+        "lexicalScope": {
+          "$ref": "#/$defs/lexicalScope"
+        },
+        "bodySha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "declarationSha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "notation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "command",
+            "roles",
+            "intent",
+            "visualTeX"
+          ],
+          "properties": {
+            "command": {
+              "type": "string",
+              "pattern": "^am[A-Z][A-Za-z]*$"
+            },
+            "roles": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "description": "Exact Unicode XML 1.0 Fifth Edition NCName; Lua additionally enforces 64 UTF-8 bytes. No case or Unicode normalization."
+              }
+            },
+            "intent": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "description": "Bounded MathML 4 Working Draft 2026-10-02 intent grammar including properties and nested applications. Runtime additionally enforces 2048 UTF-8 bytes, parser budgets and exactly one reference to each declared role. This structural schema alone does not parse the grammar or verify mathematical meaning."
+            },
+            "visualTeX": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "signature": {
+              "$ref": "#/$defs/signature"
+            },
+            "lexicalScope": {
+              "$ref": "#/$defs/lexicalScope"
+            }
+          }
+        }
+      }
+    }
+  }
+}

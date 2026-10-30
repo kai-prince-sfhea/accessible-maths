@@ -1,0 +1,45 @@
+/* Copyright 2026 Kai Prince. SPDX-License-Identifier: Apache-2.0 */
+.am-intent-speech-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .5rem;
+  max-inline-size: 100%;
+  margin-inline-start: .5rem;
+  font: inherit;
+  color: inherit;
+}
+.am-intent-speech-request {
+  min-block-size: 2.75rem;
+  min-inline-size: 2.75rem;
+  padding: .4rem .65rem;
+  border: 1px solid currentColor;
+  border-radius: var(--am-border-radius, .25rem);
+  color: inherit;
+  background: var(--am-control-background, var(--bs-body-bg, Canvas));
+  font: inherit;
+  cursor: pointer;
+}
+.am-intent-speech-request:focus-visible {
+  outline: 3px solid var(--am-focus-color, currentColor);
+  outline-offset: 3px;
+}
+.am-intent-speech-request:disabled { cursor: wait; }
+.am-intent-speech-result { overflow-wrap: anywhere; max-inline-size: 100%; }
+.am-intent-speech-result[hidden] { display: none !important; }
+.am-intent-speech-braille { display: block; }
+.am-expression-binding-yaml,
+.am-reviewed-braille-cells {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-inline-size: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .am-intent-speech-controls, .am-intent-speech-request { animation: none; transition: none; }
+}
+@media (forced-colors: active) {
+  .am-intent-speech-request { color: ButtonText; background: ButtonFace; border-color: ButtonText; }
+  .am-intent-speech-request:focus-visible { outline-color: Highlight; }
+}
+@media print { .am-intent-speech-controls { display: none !important; } }
