@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.10 — keyboard-stable expression controls, 30 October 2026
+
+Keep meaning, binding-copy and braille controls focusable during asynchronous
+work, with guarded repeat activation and generation-bound result updates. Give
+each control an expression-specific accessible name and expose related results
+through controls/expanded relationships. A brief persistent status announces
+availability without placing mathematical transcripts, YAML or braille cells in
+a live region. Ordinary completion leaves the reader's current focus alone; a
+failed export returns only its own remaining focus before its button is hidden.
+
+Wrap long control labels and compact the related-proof navigation without
+removing native proof numbering, authored labels or mathematical content.
+Native/browser and assistive-technology acceptance remain separate from pure
+control-state checks. Material AI assistance and its limits remain documented.
+
 ## 0.0.9 — explicit intent meanings and current render controls, 28 October 2026
 
 Local development candidate; no push or release. Extend the finite English

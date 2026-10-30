@@ -22,7 +22,7 @@
   const SPEECH_TIMEOUT = 20000;
   const state = {
     schemaVersion: 1,
-    version: '0.0.9',
+    version: '0.0.10',
     requestedMathMLOutput,
     expectedMathJaxVersion: EXPECTED_VERSION,
     actualMathJaxVersion: null,
@@ -335,6 +335,10 @@
         captured.revision += 1;
         captured.mathML = mml;
         if (captured.controls) {
+          captured.controls.generation++;
+          captured.controls.pendingMeaning = null;
+          setButtonBusy(captured.controls.button, false);
+          captured.controls.status.textContent = '';
           captured.controls.output.hidden = true;
           captured.controls.button.setAttribute('aria-expanded', 'false');
           captured.controls.braille?.invalidate();
@@ -469,11 +473,34 @@
     return { schemaVersion: 1, expressionId, language, status, reason,
       speech: null, nativeSpeech: null, braille: null, brailleSource: null, concepts: [], ...extra };
   }
-  function publishSpeech(item, result) {
+  function currentControls(item, controls, generation = controls?.generation) {
+    return Boolean(controls && item?.controls === controls && controls.generation === generation &&
+      speechItems.get(item.record.id) === item && controls.container.isConnected !== false &&
+      controls.forRoot === item.math.typesetRoot && controls.forRoot?.isConnected !== false);
+  }
+  function setButtonBusy(button, busy) {
+    // HTML disabled can discard keyboard focus. Keep this control in the tab
+    // order; its click guard prevents a second request while work is pending.
+    button.setAttribute('aria-disabled', String(busy));
+    button.setAttribute('aria-busy', String(busy));
+  }
+  function announceControl(item, controls, message, generation) {
+    if (!currentControls(item, controls, generation)) return;
+    if (!message.includes(expressionName(item))) message = `${message.replace(/\.$/, '')} (${expressionName(item)}).`;
+    if (controls.status.textContent !== message) controls.status.textContent = message;
+  }
+  const expressionName = item => item.record.id.replace(/^am-expression-/, 'expression ');
+  function outputId(item, suffix) {
+    const base = `${item.record.id}-${suffix}`;
+    let id = base, ordinal = 1;
+    while (window.document.getElementById(id)) id = `${base}-${++ordinal}`;
+    return id;
+  }
+  function publishSpeech(item, result, controls = item?.controls, generation = controls?.generation, request = null) {
     if (item) item.record.intentSpeech = copy(result);
-    const controls = item?.controls;
-    if (controls) {
-      controls.button.disabled = false;
+    if (currentControls(item, controls, generation) && (!controls.pendingMeaning || controls.pendingMeaning === request)) {
+      controls.pendingMeaning = null;
+      setButtonBusy(controls.button, false);
       controls.output.hidden = false;
       controls.button.setAttribute('aria-expanded', 'true');
       controls.output.replaceChildren();
@@ -503,6 +530,14 @@
                       : 'A transcript could not be produced for this expression. Native mathematics remains available.';
         text('am-intent-speech-status', message);
       }
+      const ready = result.status === 'interpreted' ? 'Meaning transcript ready below'
+        : result.status === 'native-fallback' ? 'Presentation reading ready below'
+          : result.status === 'busy' ? 'Another transcript is being prepared; try again shortly'
+            : result.status === 'stale' ? 'The expression changed; request a new transcript'
+              : result.status === 'not-ready' ? 'Mathematics is still loading'
+                : result.reason === 'speech-time-limit' ? 'The transcript request timed out'
+                  : 'Transcript unavailable; details are below';
+      announceControl(item, controls, `${ready} for ${expressionName(item)}.`, generation);
     }
     return copy(result);
   }
@@ -511,23 +546,32 @@
     if (item.controls || !output?.parentNode || !window.document.createElement) return;
     const controls = window.document.createElement('span');
     controls.className = 'am-intent-speech-controls';
+    controls.setAttribute('role', 'group');
+    controls.setAttribute('aria-label', `Options for ${expressionName(item)}`);
     const button = window.document.createElement('button');
     button.type = 'button'; button.className = 'am-intent-speech-request';
     button.textContent = 'Show meaning transcript';
+    button.setAttribute('aria-label', `Show meaning transcript for ${expressionName(item)}`);
     const transcript = window.document.createElement('span');
     transcript.className = 'am-intent-speech-result'; transcript.hidden = true;
     // Do not put this optional transcript inside MathJax's accessible tree or
-    // give it an automatic live region/ARIA label. Readers request it explicitly.
-    let suffix = 1;
-    let id = `${item.record.id}-meaning`;
-    while (window.document.getElementById(id)) id = `${item.record.id}-meaning-${++suffix}`;
+    // give its mathematical content a live region/ARIA label. A separate brief
+    // status announces availability without speaking the expression a second time.
+    const id = outputId(item, 'meaning');
     transcript.id = id;
     button.setAttribute('aria-controls', id); button.setAttribute('aria-expanded', 'false');
-    button.addEventListener('click', () => { void requestIntentSpeech(item.record.id); });
+    button.addEventListener('click', () => {
+      if (item.controls?.button !== button || !currentControls(item, item.controls) || button.getAttribute('aria-disabled') === 'true') return;
+      return requestIntentSpeech(item.record.id);
+    });
+    const status = window.document.createElement('span');
+    status.className = 'am-intent-speech-feedback';
+    status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); status.setAttribute('aria-atomic', 'true');
     controls.appendChild(button); controls.appendChild(transcript);
     output.parentNode.insertBefore(controls, output.nextSibling);
-    item.controls = { button, output: transcript, container: controls, forRoot: output };
+    item.controls = { button, output: transcript, status, container: controls, forRoot: output, generation: 0, pendingMeaning: null };
     if (realisationsId !== null) addBrailleControls(item, controls);
+    controls.appendChild(status);
   }
   function speechPreferences(document, math) {
     const options = document?.options || {};
@@ -541,7 +585,8 @@
     const language = options?.language === undefined ? realisations.config?.language || 'en' : options.language;
     const id = typeof expressionId === 'string' ? expressionId.slice(0, 128) : '';
     const item = speechItems.get(id);
-    const result = (status, reason = null, extra) => publishSpeech(item, speechResult(id, typeof language === 'string' ? language : null, status, reason, extra));
+    const controls = item?.controls, generation = controls?.generation, request = {};
+    const result = (status, reason = null, extra) => publishSpeech(item, speechResult(id, typeof language === 'string' ? language : null, status, reason, extra), controls, generation, request);
     if (!intentSpeechEnabled) return result('disabled', 'author-option-disabled');
     if (!realisations.valid) return result('unavailable', 'invalid-or-missing-realisations');
     if (realisations.mapped ? !intentSpeech.normalizeLocale(language) || intentSpeech.normalizeLocale(language) !== intentSpeech.normalizeLocale(realisations.config.language) : language !== 'en') return result('unavailable', 'unsupported-language');
@@ -579,7 +624,11 @@
     const lease = { item, expired: false, result: null };
     activeSpeech = lease;
     item.record.intentSpeech = speechResult(id, language, 'loading');
-    if (item.controls) item.controls.button.disabled = true;
+    if (currentControls(item, controls, generation)) {
+      controls.pendingMeaning = request;
+      setButtonBusy(controls.button, true);
+      announceControl(item, controls, `Preparing meaning transcript for ${expressionName(item)}.`, generation);
+    }
     let timeout;
     const work = Promise.resolve().then(() => intentSpeech.interpret(item.mathML, {
       language,
@@ -695,49 +744,78 @@
   }
   function addBrailleControls(item, controls) {
     const doc = window.document;
-    const button = (label, className) => { const node = doc.createElement('button'); node.type = 'button'; node.className = 'am-intent-speech-request ' + className; node.textContent = label; controls.appendChild(node); return node; };
-    const output = className => { const node = doc.createElement('span'); node.className = 'am-intent-speech-result ' + className; node.hidden = true; controls.appendChild(node); return node; };
-    const copyButton = button('Copy expression binding', 'am-copy-expression-binding'), bindingOutput = output('am-expression-binding-result');
-    const brailleButton = button('Show reviewed braille literals', 'am-reviewed-braille-request'), brailleOutput = output('am-reviewed-braille-result');
+    const owner = item.controls;
+    const button = (label, className) => { const node = doc.createElement('button'); node.type = 'button'; node.className = 'am-intent-speech-request ' + className; node.textContent = label; node.setAttribute('aria-label', `${label} for ${expressionName(item)}`); controls.appendChild(node); return node; };
+    const output = (className, suffix) => { const node = doc.createElement('span'); node.id = outputId(item, suffix); node.className = 'am-intent-speech-result ' + className; node.hidden = true; controls.appendChild(node); return node; };
+    const copyButton = button('Copy expression binding', 'am-copy-expression-binding'), bindingOutput = output('am-expression-binding-result', 'binding');
+    const brailleButton = button('Show reviewed braille literals', 'am-reviewed-braille-request'), brailleOutput = output('am-reviewed-braille-result', 'braille');
     const exportButton = button('Download reviewed braille JSON', 'am-reviewed-braille-export'); exportButton.hidden = true;
-    let copyEpoch = 0, brailleEpoch = 0;
+    for (const [control, target] of [[copyButton, bindingOutput], [brailleButton, brailleOutput]]) {
+      control.setAttribute('aria-controls', target.id); control.setAttribute('aria-expanded', 'false');
+    }
+    let copyEpoch = 0, brailleEpoch = 0, exportEpoch = 0;
     item.controls.braille = { invalidate() {
-      copyEpoch++; brailleEpoch++; bindingOutput.hidden = true; brailleOutput.hidden = true; exportButton.hidden = true;
-      bindingOutput.replaceChildren(); brailleOutput.replaceChildren(); copyButton.disabled = false; brailleButton.disabled = false;
+      copyEpoch++; brailleEpoch++; exportEpoch++; bindingOutput.hidden = true; brailleOutput.hidden = true; exportButton.hidden = true;
+      bindingOutput.replaceChildren(); brailleOutput.replaceChildren();
+      for (const control of [copyButton, brailleButton, exportButton]) setButtonBusy(control, false);
+      copyButton.setAttribute('aria-expanded', 'false'); brailleButton.setAttribute('aria-expanded', 'false');
       item.record.reviewedBraille = bindingResult(item.record.id, 'stale', 'expression-render-in-progress');
     } };
     const say = (where, value, className = 'am-intent-speech-status', name = 'span') => { const node = doc.createElement(name); node.className = className; node.textContent = value; where.appendChild(node); return node; };
     copyButton.addEventListener('click', async () => {
-      const epoch = ++copyEpoch, context = bindingContext(item.record.id); copyButton.disabled = true;
+      if (!currentControls(item, owner) || copyButton.getAttribute('aria-disabled') === 'true') return;
+      const epoch = ++copyEpoch, generation = owner.generation, context = bindingContext(item.record.id);
+      const owned = () => epoch === copyEpoch && currentControls(item, owner, generation);
+      setButtonBusy(copyButton, true); announceControl(item, owner, `Preparing the binding for ${expressionName(item)}.`, generation);
       try {
-        const result = await getExpressionBinding(item.record.id); if (epoch !== copyEpoch) return;
+        const result = await getExpressionBinding(item.record.id); if (!owned()) return;
         bindingOutput.replaceChildren(); bindingOutput.hidden = false;
-        if (result.status !== 'ready' || context.status !== 'current' || !context.isCurrent()) { say(bindingOutput, 'A binding is unavailable or stale. It requires one current, preserved authored intent.'); return; }
+        copyButton.setAttribute('aria-expanded', 'true');
+        if (result.status !== 'ready' || context.status !== 'current' || !context.isCurrent()) { say(bindingOutput, 'A binding is unavailable or stale. It requires one current, preserved authored intent.'); announceControl(item, owner, 'Binding unavailable; details are below.', generation); return; }
         say(bindingOutput, result.binding.yaml, 'am-expression-binding-yaml', 'code');
         let copied = false;
         try { if (window.navigator?.clipboard?.writeText) { await window.navigator.clipboard.writeText(result.binding.yaml); copied = true; } } catch { /* Visible YAML remains available for manual copying. */ }
-        if (epoch !== copyEpoch) return;
-        if (!context.isCurrent()) { bindingOutput.replaceChildren(); say(bindingOutput, 'The expression changed while copying. A previously copied binding may now be stale; request a new one.'); return; }
+        if (!owned()) return;
+        if (!context.isCurrent()) { bindingOutput.replaceChildren(); say(bindingOutput, 'The expression changed while copying. A previously copied binding may now be stale; request a new one.'); announceControl(item, owner, 'The expression changed; request its binding again.', generation); return; }
         say(bindingOutput, copied ? ' Binding YAML copied. Add your reviewed literal, named code and review metadata in page YAML.' : ' Select and copy this binding YAML. Add your reviewed literal, named code and review metadata in page YAML.');
-      } finally { if (epoch === copyEpoch) copyButton.disabled = false; }
+        announceControl(item, owner, copied ? 'Binding copied.' : 'Binding ready below for manual copying.', generation);
+      } finally { if (owned()) setButtonBusy(copyButton, false); }
     });
     brailleButton.addEventListener('click', async () => {
-      const epoch = ++brailleEpoch; brailleButton.disabled = true; exportButton.hidden = true;
+      if (!currentControls(item, owner) || brailleButton.getAttribute('aria-disabled') === 'true') return;
+      const epoch = ++brailleEpoch, generation = owner.generation;
+      const owned = () => epoch === brailleEpoch && currentControls(item, owner, generation);
+      setButtonBusy(brailleButton, true); exportButton.hidden = true;
+      announceControl(item, owner, `Checking authored braille for ${expressionName(item)}.`, generation);
       try {
-        const result = await requestBrailleLiterals(item.record.id); if (epoch !== brailleEpoch) return;
+        const result = await requestBrailleLiterals(item.record.id); if (!owned()) return;
         brailleOutput.replaceChildren(); brailleOutput.hidden = false;
-        if (result.status !== 'matched') { say(brailleOutput, 'No reviewed braille literal matches this exact current expression and authored intent. Native mathematics and its braille remain available.'); return; }
+        brailleButton.setAttribute('aria-expanded', 'true');
+        if (result.status !== 'matched') { say(brailleOutput, 'No reviewed braille literal matches this exact current expression and authored intent. Native mathematics and its braille remain available.'); announceControl(item, owner, 'No matching authored braille literal is available.', generation); return; }
         for (const literal of result.literals) {
           say(brailleOutput, ` Author-reviewed braille literal — ${literal.code} (${literal.language}); revision ${literal.revision}, reviewed by ${literal['reviewed-by']}: `);
           say(brailleOutput, literal.cells, 'am-reviewed-braille-cells', 'code');
         }
         say(brailleOutput, ' ' + result.qualification); exportButton.hidden = false;
-      } finally { if (epoch === brailleEpoch) brailleButton.disabled = false; }
+        announceControl(item, owner, 'Authored braille text is ready below. Native braille is unchanged.', generation);
+      } finally { if (owned()) setButtonBusy(brailleButton, false); }
     });
     exportButton.addEventListener('click', async () => {
-      exportButton.disabled = true;
-      try { const result = await exportBrailleLiterals(item.record.id, { download: true }); if (result.status !== 'download-requested') { exportButton.hidden = true; brailleOutput.replaceChildren(); say(brailleOutput, ' The expression or configuration changed, or the JSON download is unavailable. Request the reviewed literal again.'); } }
-      finally { exportButton.disabled = false; }
+      if (!currentControls(item, owner) || exportButton.getAttribute('aria-disabled') === 'true') return;
+      const epoch = ++exportEpoch, generation = owner.generation;
+      const owned = () => epoch === exportEpoch && currentControls(item, owner, generation);
+      setButtonBusy(exportButton, true); announceControl(item, owner, 'Preparing the braille JSON download.', generation);
+      try {
+        const result = await exportBrailleLiterals(item.record.id, { download: true }); if (!owned()) return;
+        if (result.status !== 'download-requested') {
+          // This control is about to disappear. Only return its own remaining
+          // focus; a reader who moved elsewhere must keep their position.
+          if (doc.activeElement === exportButton && brailleButton.isConnected !== false) brailleButton.focus({ preventScroll: true });
+          exportButton.hidden = true; brailleOutput.replaceChildren(); brailleOutput.hidden = false;
+          say(brailleOutput, ' The expression or configuration changed, or the JSON download is unavailable. Request the reviewed literal again.');
+          announceControl(item, owner, 'Download unavailable; request the authored braille literal again.', generation);
+        } else announceControl(item, owner, 'Braille JSON download requested.', generation);
+      } finally { if (owned()) setButtonBusy(exportButton, false); }
     });
   }
 

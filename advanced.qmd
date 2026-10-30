@@ -12,6 +12,13 @@ format:
   docx: default
 ---
 
+The controls beside an annotated expression name that expression. A request
+keeps its button in the keyboard order while it is being prepared; moving to
+another control keeps your chosen position. Brief status messages announce when
+a result is available. Read the transcript or authored braille text separately:
+those results are not automatically spoken again and do not replace MathJax's
+native accessible representation or establish that a proposed meaning is correct.
+
 ::: {#thm-positive-square name="Positive squares" semantic-id="https://example.org/maths/positive-square"}
 For every non-zero real number $x$, the square $x^2$ is positive.
 :::

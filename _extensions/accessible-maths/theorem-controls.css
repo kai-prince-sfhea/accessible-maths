@@ -20,13 +20,28 @@
 }
 
 .am-related {
-  margin-block-start: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .25rem .65rem;
+  margin-block-start: .75rem;
 }
 
 .am-related > p {
-  margin-block-end: 0.25rem;
+  margin: 0;
   font-weight: 600;
 }
+
+.am-related > ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem .75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.am-related a { overflow-wrap: anywhere; }
 
 .am-level-controls {
   margin-block: 0.75rem;

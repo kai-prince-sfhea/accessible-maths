@@ -425,7 +425,7 @@ local function process(doc)
         has_level = has_level or item.level ~= nil
       end
       el.content:insert(pandoc.RawBlock('html', '<div class="am-related" role="group" aria-label="'
-        .. escape(config.labels.related) .. '"><p>' .. escape(config.labels.related) .. '</p><ul>' .. table.concat(links) .. '</ul></div>'))
+        .. escape(config.labels.related) .. '"><p>' .. escape(config.labels.related) .. '</p><ul role="list">' .. table.concat(links) .. '</ul></div>'))
       if has_level then
         el.content:insert(pandoc.RawBlock('html', '<div class="am-level-controls" hidden data-am-level-for="'
           .. escape(el.identifier) .. '" data-am-level-label="' .. escape(config.labels.level)
@@ -438,7 +438,7 @@ local function process(doc)
   -- need no final transforming AST walk when neither feature is used.
   if next(rewrite) then doc.blocks = doc.blocks:walk(rewrite) end
   if html and config['theorem-controls'] and next(disclosures) then
-    quarto.doc.add_html_dependency({ name='accessible-maths-controls', version='0.0.9',
+    quarto.doc.add_html_dependency({ name='accessible-maths-controls', version='0.0.10',
       scripts={'theorem-controls.js'}, stylesheets={'theorem-controls.css'} })
   end
   if html and config.semantics == 'author-annotated' and math_count > 0 then
@@ -450,7 +450,7 @@ local function process(doc)
       quarto.doc.include_text('in-header','<script type="application/json" id="accessible-maths-realisations">'..json..'</script>')
       attributes['data-am-realisations']='accessible-maths-realisations'
     end
-    quarto.doc.add_html_dependency({ name='accessible-maths-semantics', version='0.0.9',
+    quarto.doc.add_html_dependency({ name='accessible-maths-semantics', version='0.0.10',
       scripts={'intent-grammar.js','intent-speech.js',{path='mathjax-adapter.js', attribs=attributes}},
       stylesheets=config['intent-speech'] and {'intent-speech.css'} or {} })
   end
@@ -483,7 +483,7 @@ local function process(doc)
         destination=fragment(declaration.anchor)}
     end
     local payload = {schemaVersion=1, contractVersion='0', kind='accessible-maths-declarations',
-      producer={name='accessible-maths', version='0.0.9'},
+      producer={name='accessible-maths', version='0.0.10'},
       scope={type='document', source=source, occurrenceIds='document-local'},
       coverage='explicit-native-declarations-only', objects=objects, occurrences=occurrences}
     local json = quarto.json.encode(payload):gsub('<', '\\u003c'):gsub('>', '\\u003e'):gsub('&', '\\u0026')

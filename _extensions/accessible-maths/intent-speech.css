@@ -2,16 +2,19 @@
 .am-intent-speech-controls {
   display: inline-flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: .5rem;
-  max-inline-size: 100%;
+  max-inline-size: calc(100% - .5rem);
+  min-inline-size: 0;
   margin-inline-start: .5rem;
   font: inherit;
   color: inherit;
 }
 .am-intent-speech-request {
+  box-sizing: border-box;
   min-block-size: 2.75rem;
   min-inline-size: 2.75rem;
+  max-inline-size: 100%;
   padding: .4rem .65rem;
   border: 1px solid currentColor;
   border-radius: var(--am-border-radius, .25rem);
@@ -19,13 +22,16 @@
   background: var(--am-control-background, var(--bs-body-bg, Canvas));
   font: inherit;
   cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .am-intent-speech-request:focus-visible {
   outline: 3px solid var(--am-focus-color, currentColor);
   outline-offset: 3px;
 }
-.am-intent-speech-request:disabled { cursor: wait; }
-.am-intent-speech-result { overflow-wrap: anywhere; max-inline-size: 100%; }
+.am-intent-speech-request[aria-disabled="true"] { cursor: wait; }
+.am-intent-speech-result { flex-basis: 100%; min-inline-size: 0; overflow-wrap: anywhere; max-inline-size: 100%; }
+.am-intent-speech-feedback { flex-basis: 100%; min-inline-size: 0; font-size: .9em; overflow-wrap: anywhere; }
 .am-intent-speech-result[hidden] { display: none !important; }
 .am-intent-speech-braille { display: block; }
 .am-expression-binding-yaml,
